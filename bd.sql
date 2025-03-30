@@ -6,14 +6,20 @@ CREATE TABLE rol (
 
 CREATE TABLE personas (
     id_persona SERIAL PRIMARY KEY,
-    numero_cedula VARCHAR(20) NOT NULL UNIQUE,
+    numero_cedula VARCHAR(20) NULL UNIQUE,
     nombres VARCHAR(100) NOT NULL,
     apellidos VARCHAR(100) NOT NULL,
     fecha_nacimiento DATE NULL,
     genero VARCHAR(20) NULL,
     celular VARCHAR(20) NULL,
     direccion VARCHAR(255) NULL,
-    correo_electronico VARCHAR(100) NULL  
+    correo_electronico VARCHAR(100) NULL,
+    nivel_estudio VARCHAR(50) NULL,
+    numero_telefono VARCHAR(15) NULL,
+    nacionalidad VARCHAR(30) NULL,
+    profesion VARCHAR(50) NULL,
+    estado_civil VARCHAR(20) NULL,
+    lugar_trabajo VARCHAR(50) NULL
 );
 
 CREATE TABLE usuarios (

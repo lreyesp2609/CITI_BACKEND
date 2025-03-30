@@ -75,14 +75,14 @@ class RegistrarUsuarioView(View):
                 return JsonResponse({'error': 'Token inválido'}, status=401)
             
             # Check required fields
-            required_fields = ['nombres', 'apellidos', 'numero_cedula']
+            required_fields = ['nombres', 'apellidos']  # Removed 'numero_cedula'
             for field in required_fields:
                 if not request.POST.get(field):
                     return JsonResponse({'error': f'El campo {field} es obligatorio'}, status=400)
             
-            # Verificar si ya existe una persona con ese número de cédula
-            numero_cedula = request.POST.get('numero_cedula')
-            if Persona.objects.filter(numero_cedula=numero_cedula).exists():
+            # Verificar si ya existe una persona con ese número de cédula (solo si se proporciona)
+            numero_cedula = request.POST.get('numero_cedula', '')
+            if numero_cedula and Persona.objects.filter(numero_cedula=numero_cedula).exists():
                 return JsonResponse({'error': 'Ya existe una persona con este número de cédula'}, status=400)
             
             with transaction.atomic():
@@ -92,13 +92,30 @@ class RegistrarUsuarioView(View):
                 genero = request.POST.get('genero', '')  
                 fecha_nacimiento = request.POST.get('fecha_nacimiento', None)
                 
+                # Nuevos campos
+                nivel_estudio = request.POST.get('nivel_estudio', None)
+                nacionalidad = request.POST.get('nacionalidad', None)
+                profesion = request.POST.get('profesion', None)
+                estado_civil = request.POST.get('estado_civil', None)
+                lugar_trabajo = request.POST.get('lugar_trabajo', None)
+                celular = request.POST.get('celular', None)
+                direccion = request.POST.get('direccion', None)
+                
                 persona = Persona.objects.create(
                     nombres=nombres,
                     apellidos=apellidos,
                     numero_cedula=numero_cedula,
                     correo_electronico=correo_electronico,
                     genero=genero,
-                    fecha_nacimiento=fecha_nacimiento
+                    fecha_nacimiento=fecha_nacimiento,
+                    # Nuevos campos
+                    nivel_estudio=nivel_estudio,
+                    nacionalidad=nacionalidad,
+                    profesion=profesion,
+                    estado_civil=estado_civil,
+                    lugar_trabajo=lugar_trabajo,
+                    celular=celular,
+                    direccion=direccion
                 )
 
                 return JsonResponse({

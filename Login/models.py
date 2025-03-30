@@ -11,14 +11,20 @@ class Rol(models.Model):
 
 class Persona(models.Model):
     id_persona = models.AutoField(primary_key=True)
-    numero_cedula = models.CharField(max_length=20)
+    numero_cedula = models.CharField(max_length=20, null=True)
     nombres = models.CharField(max_length=100)
     apellidos = models.CharField(max_length=100)
-    fecha_nacimiento = models.DateField()
+    fecha_nacimiento = models.DateField(blank=True, null=True)
     genero = models.CharField(max_length=20, blank=True, null=True)  
     celular = models.CharField(max_length=20, blank=True, null=True) 
     direccion = models.CharField(max_length=255, blank=True, null=True)  
-    correo_electronico = models.CharField(max_length=100, blank=True, null=True) 
+    correo_electronico = models.CharField(max_length=100, blank=True, null=True)
+    # Nuevos campos
+    nivel_estudio = models.CharField(max_length=50, blank=True, null=True)
+    nacionalidad = models.CharField(max_length=30, blank=True, null=True)
+    profesion = models.CharField(max_length=50, blank=True, null=True)
+    estado_civil = models.CharField(max_length=20, blank=True, null=True)
+    lugar_trabajo = models.CharField(max_length=50, blank=True, null=True)
 
     class Meta:
         managed = False  
