@@ -51,7 +51,12 @@ class ListarPersonasView(View):
                     'genero': persona.genero,
                     'celular': persona.celular,
                     'direccion': persona.direccion,
-                    'correo_electronico': persona.correo_electronico
+                    'correo_electronico': persona.correo_electronico,
+                    'nivel_estudio': persona.nivel_estudio,
+                    'nacionalidad': persona.nacionalidad,
+                    'profesion': persona.profesion,
+                    'estado_civil': persona.estado_civil,
+                    'lugar_trabajo': persona.lugar_trabajo
                 })
             
             return JsonResponse({'personas': personas_list}, status=200)
@@ -102,7 +107,12 @@ class DetallePersonaView(View):
                     'genero': persona.genero,
                     'celular': persona.celular,
                     'direccion': persona.direccion,
-                    'correo_electronico': persona.correo_electronico
+                    'correo_electronico': persona.correo_electronico,
+                    'nivel_estudio': persona.nivel_estudio,
+                    'nacionalidad': persona.nacionalidad,
+                    'profesion': persona.profesion,
+                    'estado_civil': persona.estado_civil,
+                    'lugar_trabajo': persona.lugar_trabajo
                 }
                 
                 return JsonResponse({'persona': persona_data}, status=200)
@@ -111,4 +121,112 @@ class DetallePersonaView(View):
                 return JsonResponse({'error': 'Persona no encontrada'}, status=404)
             
         except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ActualizarPersonaView(View):
+    def post(self, request, id_persona, *args, **kwargs):
+        try:
+            # Obtener token del encabezado Authorization
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            # Extraer el token si viene con el prefijo Bearer
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+            else:
+                token = auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                rol_usuario = payload.get('rol')
+                
+                # Verificar si el rol está permitido (solo roles 1 y 2)
+                rol_id = Rol.objects.filter(rol=rol_usuario).first()
+                if not rol_id or rol_id.id_rol not in [1, 2]:
+                    return JsonResponse({'error': 'No tiene permisos para actualizar personas'}, status=403)
+                    
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+            
+            # Iniciar transacción
+            from django.db import transaction
+            with transaction.atomic():
+                try:
+                    persona = Persona.objects.get(id_persona=id_persona)
+                except Persona.DoesNotExist:
+                    return JsonResponse({'error': 'Persona no encontrada'}, status=404)
+                
+                # Verificar si hay al menos un campo para actualizar
+                if not request.POST:
+                    return JsonResponse({'error': 'No se proporcionaron datos para actualizar'}, status=400)
+                
+                # Verificar si se está actualizando la cédula y si ya existe
+                numero_cedula = request.POST.get('numero_cedula')
+                if numero_cedula:
+                    # Verificar que la cédula no exista en otra persona
+                    if Persona.objects.filter(numero_cedula=numero_cedula).exclude(id_persona=id_persona).exists():
+                        return JsonResponse({'error': 'Ya existe otra persona con este número de cédula'}, status=400)
+                    persona.numero_cedula = numero_cedula
+                
+                # Actualizar campos si están presentes
+                if 'nombres' in request.POST and request.POST.get('nombres'):
+                    persona.nombres = request.POST.get('nombres')
+                
+                if 'apellidos' in request.POST and request.POST.get('apellidos'):
+                    persona.apellidos = request.POST.get('apellidos')
+                
+                # Actualizar campos opcionales si están presentes
+                if 'fecha_nacimiento' in request.POST:
+                    persona.fecha_nacimiento = request.POST.get('fecha_nacimiento') or None
+                if 'genero' in request.POST:
+                    persona.genero = request.POST.get('genero')
+                if 'celular' in request.POST:
+                    persona.celular = request.POST.get('celular')
+                if 'direccion' in request.POST:
+                    persona.direccion = request.POST.get('direccion')
+                if 'correo_electronico' in request.POST:
+                    persona.correo_electronico = request.POST.get('correo_electronico')
+                if 'nivel_estudio' in request.POST:
+                    persona.nivel_estudio = request.POST.get('nivel_estudio')
+                if 'nacionalidad' in request.POST:
+                    persona.nacionalidad = request.POST.get('nacionalidad')
+                if 'profesion' in request.POST:
+                    persona.profesion = request.POST.get('profesion')
+                if 'estado_civil' in request.POST:
+                    persona.estado_civil = request.POST.get('estado_civil')
+                if 'lugar_trabajo' in request.POST:
+                    persona.lugar_trabajo = request.POST.get('lugar_trabajo')
+                
+                # Guardar los cambios
+                persona.save()
+                
+                # Preparar respuesta
+                persona_data = {
+                    'id_persona': persona.id_persona,
+                    'numero_cedula': persona.numero_cedula,
+                    'nombres': persona.nombres,
+                    'apellidos': persona.apellidos,
+                    'fecha_nacimiento': persona.fecha_nacimiento.strftime('%Y-%m-%d') if persona.fecha_nacimiento else None,
+                    'genero': persona.genero,
+                    'celular': persona.celular,
+                    'direccion': persona.direccion,
+                    'correo_electronico': persona.correo_electronico,
+                    'nivel_estudio': persona.nivel_estudio,
+                    'nacionalidad': persona.nacionalidad,
+                    'profesion': persona.profesion,
+                    'estado_civil': persona.estado_civil,
+                    'lugar_trabajo': persona.lugar_trabajo
+                }
+                
+                return JsonResponse({
+                    'mensaje': 'Persona actualizada exitosamente',
+                    'persona': persona_data
+                }, status=200)
+                
+        except Exception as e:
+            # Si ocurre cualquier error, la transacción hace rollback automáticamente
             return JsonResponse({'error': str(e)}, status=500)

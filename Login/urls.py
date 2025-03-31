@@ -11,4 +11,6 @@ Las URLs son:
 urlpatterns = [
     path('login/', IniciarSesionView.as_view(), name='iniciar_sesion'),
     path('logout/', CerrarSesionView.as_view(), name='cerrar_sesion'),
+    path('validate-token/', ValidarTokenView.as_view(), name='cerrar_sesion'),
+
 ]

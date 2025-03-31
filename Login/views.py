@@ -49,7 +49,25 @@ class IniciarSesionView(View):
 class CerrarSesionView(View):
     def post(self, request, *args, **kwargs):
         try:
-            logout(request)
+            # Obtener el token del encabezado Authorization
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            # Extraer el token si viene con el prefijo Bearer
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+            else:
+                token = auth_header
+                
+            # No necesitamos validar el token aquí, solo reconocer el cierre de sesión
+            # La función logout() de Django es principalmente para autenticación basada en sesiones, no en tokens
+            
+            # Django no maneja tokens JWT, así que no hay nada que invalidar en el servidor
+            # El frontend debe eliminar el token del almacenamiento local
+            
+            logout(request)  # Esto limpia la sesión actual, aunque no afecta a los tokens JWT
+            
             return JsonResponse({'mensaje': 'Sesión cerrada exitosamente'})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
@@ -89,37 +107,21 @@ class CambiarContraseniaView(View):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-
 @method_decorator(csrf_exempt, name='dispatch')
-class RegistrarUsuarioView(View):
-    def post(self, request, *args, **kwargs):
+class ValidarTokenView(View):
+    def get(self, request):
         try:
-            with transaction.atomic():
-                nombres = request.POST.get('nombres')
-                apellidos = request.POST.get('apellidos')
-                correo_electronico = request.POST.get('correo_electronico')
-                usuario = request.POST.get('usuario')
-                contrasenia = request.POST.get('contrasenia')
-                genero = request.POST.get('genero')  
-                fecha_nacimiento = request.POST.get('fecha_nacimiento')                
-                rol_usuario = Rol.objects.get(id_rol=2)
-
-                persona = Persona.objects.create(
-                    nombres=nombres,
-                    apellidos=apellidos,
-                    correo_electronico=correo_electronico,
-                    genero=genero,
-                    fecha_nacimiento=fecha_nacimiento
-                )
-
-                nuevo_usuario = Usuario.objects.create(
-                    id_persona=persona,
-                    usuario=usuario,
-                    contrasenia=make_password(contrasenia),
-                    id_rol=rol_usuario  
-                )
-
-                return JsonResponse({'mensaje': 'Usuario registrado exitosamente'}, status=201)
-
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'valid': False}, status=401)
+                
+            token = auth_header.split(' ')[1] if 'Bearer ' in auth_header else auth_header
+            jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            return JsonResponse({'valid': True})
+            
+        except jwt.ExpiredSignatureError:
+            return JsonResponse({'valid': False}, status=401)
+        except jwt.InvalidTokenError:
+            return JsonResponse({'valid': False}, status=401)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
