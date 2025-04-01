@@ -6,6 +6,7 @@ from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from Login.models import Persona, Rol
+from datetime import datetime
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ListarPersonasView(View):
@@ -37,7 +38,7 @@ class ListarPersonasView(View):
                 return JsonResponse({'error': 'Token inválido'}, status=401)
             
             # Obtener todas las personas
-            personas = Persona.objects.all()
+            personas = Persona.objects.all().order_by('id_persona')            
             
             # Convertir a lista de diccionarios para la respuesta JSON
             personas_list = []
@@ -181,7 +182,8 @@ class ActualizarPersonaView(View):
                 
                 # Actualizar campos opcionales si están presentes
                 if 'fecha_nacimiento' in request.POST:
-                    persona.fecha_nacimiento = request.POST.get('fecha_nacimiento') or None
+                    fecha_str = request.POST.get('fecha_nacimiento')
+                    persona.fecha_nacimiento = datetime.strptime(fecha_str, '%Y-%m-%d').date() if fecha_str else None
                 if 'genero' in request.POST:
                     persona.genero = request.POST.get('genero')
                 if 'celular' in request.POST:

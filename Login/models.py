@@ -19,7 +19,6 @@ class Persona(models.Model):
     celular = models.CharField(max_length=20, blank=True, null=True) 
     direccion = models.CharField(max_length=255, blank=True, null=True)  
     correo_electronico = models.CharField(max_length=100, blank=True, null=True)
-    # Nuevos campos
     nivel_estudio = models.CharField(max_length=50, blank=True, null=True)
     nacionalidad = models.CharField(max_length=30, blank=True, null=True)
     profesion = models.CharField(max_length=50, blank=True, null=True)

@@ -1,5 +1,5 @@
 import jwt
-from django.db import transaction
+
 from django.conf import settings
 from django.http import JsonResponse
 from django.views import View
@@ -7,7 +7,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth import logout
-from .models import Usuario, Rol, Persona
+from .models import Usuario
 
 @method_decorator(csrf_exempt, name='dispatch')
 class IniciarSesionView(View):
@@ -31,12 +31,21 @@ class IniciarSesionView(View):
                 if check_password(contrasenia, user.contrasenia):
                     token = self.generate_token(user)
 
-                    return JsonResponse({
+                    response = JsonResponse({
                         'token': token,
-                        'nombre_usuario': nombre_usuario,
+                        'nombre_usuario': user.usuario,  # Cambiado de nombre_usuario a user.usuario
                         'id_usuario': user.id_usuario,
                         'rol': user.id_rol.id_rol,
+                        'nombre_rol': user.id_rol.rol,  # Agregado para mostrar el nombre del rol en el front
                     })
+                    
+                    response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+                    response["Access-Control-Allow-Headers"] = "Content-Type"
+                    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+                    response["Pragma"] = "no-cache"
+                    response["Expires"] = "0"
+                    
+                    return response
                 else:
                     return JsonResponse({'mensaje': 'Contraseña incorrecta'}, status=401)
             else:
@@ -44,31 +53,20 @@ class IniciarSesionView(View):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-            
+        
 @method_decorator(csrf_exempt, name='dispatch')
 class CerrarSesionView(View):
     def post(self, request, *args, **kwargs):
         try:
-            # Obtener el token del encabezado Authorization
-            auth_header = request.headers.get('Authorization')
-            if not auth_header:
-                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
-                
-            # Extraer el token si viene con el prefijo Bearer
-            if auth_header.startswith('Bearer '):
-                token = auth_header.split(' ')[1]
-            else:
-                token = auth_header
-                
-            # No necesitamos validar el token aquí, solo reconocer el cierre de sesión
-            # La función logout() de Django es principalmente para autenticación basada en sesiones, no en tokens
+            # En una API REST pura no hay sesión que destruir, pero puedes invalidar el token si usas JWT con lista negra
+            response = JsonResponse({'mensaje': 'Sesión cerrada correctamente'})
             
-            # Django no maneja tokens JWT, así que no hay nada que invalidar en el servidor
-            # El frontend debe eliminar el token del almacenamiento local
+            # Headers para limpiar el caché del cliente
+            response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+            response["Pragma"] = "no-cache"
+            response["Expires"] = "0"
             
-            logout(request)  # Esto limpia la sesión actual, aunque no afecta a los tokens JWT
-            
-            return JsonResponse({'mensaje': 'Sesión cerrada exitosamente'})
+            return response
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
@@ -105,23 +103,3 @@ class CambiarContraseniaView(View):
         except Usuario.DoesNotExist:
             return JsonResponse({'error': 'Usuario no encontrado'}, status=404)
 
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-@method_decorator(csrf_exempt, name='dispatch')
-class ValidarTokenView(View):
-    def get(self, request):
-        try:
-            auth_header = request.headers.get('Authorization')
-            if not auth_header:
-                return JsonResponse({'valid': False}, status=401)
-                
-            token = auth_header.split(' ')[1] if 'Bearer ' in auth_header else auth_header
-            jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
-            return JsonResponse({'valid': True})
-            
-        except jwt.ExpiredSignatureError:
-            return JsonResponse({'valid': False}, status=401)
-        except jwt.InvalidTokenError:
-            return JsonResponse({'valid': False}, status=401)
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
