@@ -81,10 +81,15 @@ class RegistrarUsuarioView(View):
                     return JsonResponse({'error': f'El campo {field} es obligatorio'}, status=400)
             
             # Verificar si ya existe una persona con ese número de cédula (solo si se proporciona)
-            numero_cedula = request.POST.get('numero_cedula', '')
-            if numero_cedula and Persona.objects.filter(numero_cedula=numero_cedula).exists():
-                return JsonResponse({'error': 'Ya existe una persona con este número de cédula'}, status=400)
-            
+            # Manejo especial para cédula vacía
+            numero_cedula = request.POST.get('numero_cedula', '').strip()
+            if numero_cedula:  # Solo validar si hay un valor
+                if Persona.objects.filter(numero_cedula=numero_cedula).exists():
+                    return JsonResponse({'error': 'Ya existe una persona con este número de cédula'}, status=400)
+            else:
+                # Convertir a None si está vacío
+                numero_cedula = None
+
             with transaction.atomic():
                 nombres = request.POST.get('nombres')
                 apellidos = request.POST.get('apellidos')
@@ -104,7 +109,7 @@ class RegistrarUsuarioView(View):
                 persona = Persona.objects.create(
                     nombres=nombres,
                     apellidos=apellidos,
-                    numero_cedula=numero_cedula,
+                    numero_cedula=numero_cedula,  # Usar None en lugar de cadena vacía
                     correo_electronico=correo_electronico,
                     genero=genero,
                     fecha_nacimiento=fecha_nacimiento,
