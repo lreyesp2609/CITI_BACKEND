@@ -10,6 +10,7 @@ from Ministerio.models import Ministerio
 from django.db import transaction
 from django.contrib.auth.hashers import make_password
 import traceback
+from django.db.models import Q 
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CrearMinisterioView(View):
@@ -94,13 +95,15 @@ class CrearMinisterioView(View):
                             defaults={
                                 'id_rol': rol_lider,
                                 'usuario': username,
-                                'contrasenia': password
+                                'contrasenia': password,
+                                'activo': True  # Asegurar que esté activo al crearse
                             }
                         )
                         
                         if not created:
-                            # Si el usuario ya existe, actualizar a líder
+                            # Si el usuario ya existe, actualizar a líder y asegurarse que esté activo
                             usuario.id_rol = rol_lider
+                            usuario.activo = True
                             usuario.save()
                         
                         return usuario
@@ -192,11 +195,11 @@ class ListarMinisteriosView(View):
             except jwt.InvalidTokenError:
                 return JsonResponse({'error': 'Token inválido'}, status=401)
 
-            # 2. Obtener todos los ministerios con información de líderes
+            # 2. Obtener todos los ministerios con información de líderes, ordenados por id_ministerio ascendente
             ministerios = Ministerio.objects.select_related(
                 'id_lider1__id_persona', 
                 'id_lider2__id_persona'
-            ).all()
+            ).all().order_by('id_ministerio')  # <- Aquí añades el order_by
 
             # 3. Preparar la respuesta
             ministerios_data = []
@@ -234,3 +237,177 @@ class ListarMinisteriosView(View):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class EditarMinisterioView(View):
+    def post(self, request, id_ministerio, *args, **kwargs):
+        try:
+            # 1. Validación del token
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            token = auth_header.split('Bearer ')[1] if 'Bearer ' in auth_header else auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                rol_usuario = payload.get('rol')
+                
+                rol_id = Rol.objects.filter(rol=rol_usuario).first()
+                if not rol_id or rol_id.id_rol not in [1, 2]:
+                    return JsonResponse({'error': 'No tiene permisos para editar ministerios'}, status=403)
+                    
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+
+            # 2. Obtener el ministerio a editar
+            try:
+                ministerio = Ministerio.objects.get(id_ministerio=id_ministerio)
+            except Ministerio.DoesNotExist:
+                return JsonResponse({'error': 'Ministerio no encontrado'}, status=404)
+
+            # 3. Procesar datos del formulario
+            nombre = request.POST.get('nombre')
+            descripcion = request.POST.get('descripcion')
+            estado = request.POST.get('estado')
+            nuevo_lider1_id = request.POST.get('id_persona_lider1')
+            nuevo_lider2_id = request.POST.get('id_persona_lider2')
+
+            with transaction.atomic():
+                # 4. Manejo de líderes actuales (para desactivar si son reemplazados)
+                lideres_originales = {
+                    'lider1': ministerio.id_lider1,
+                    'lider2': ministerio.id_lider2
+                }
+                
+                # 5. Función para manejar cambios de líderes
+                def procesar_lider(persona_id, lider_actual):
+                    if not persona_id:
+                        return None
+                    
+                    try:
+                        persona = Persona.objects.get(id_persona=int(persona_id))
+                        
+                        # Validar campos requeridos para líder
+                        campos_requeridos = [
+                            persona.numero_cedula,
+                            persona.fecha_nacimiento,
+                            persona.genero,
+                            persona.celular,
+                            persona.direccion,
+                            persona.correo_electronico,
+                            persona.nivel_estudio,
+                            persona.nacionalidad,
+                            persona.profesion,
+                            persona.estado_civil,
+                            persona.lugar_trabajo
+                        ]
+                        
+                        if any(campo is None or campo == '' for campo in campos_requeridos):
+                            raise ValueError('Todos los datos de la persona deben estar completos para ser líder')
+                        
+                        # Buscar o crear usuario líder
+                        rol_lider = Rol.objects.get(id_rol=2)
+                        primer_nombre = persona.nombres.split()[0].lower()
+                        primer_apellido = persona.apellidos.split()[0].lower()
+                        username = f"{primer_nombre}.{primer_apellido}"
+                        password = make_password(persona.numero_cedula)
+                        
+                        usuario, created = Usuario.objects.get_or_create(
+                            id_persona=persona,
+                            defaults={
+                                'id_rol': rol_lider,
+                                'usuario': username,
+                                'contrasenia': password,
+                                'activo': True
+                            }
+                        )
+                        
+                        if not created:
+                            usuario.id_rol = rol_lider
+                            usuario.activo = True
+                            usuario.save()
+                            
+                        return usuario
+                    
+                    except Exception as e:
+                        raise ValueError(str(e))
+
+                # 6. Procesar nuevos líderes
+                nuevos_lideres = {}
+                errores = {}
+                
+                if nuevo_lider1_id is not None:  # None significa que no se envió, '' significa que se quiere quitar
+                    try:
+                        nuevos_lideres['lider1'] = procesar_lider(nuevo_lider1_id, lideres_originales['lider1']) if nuevo_lider1_id != '' else None
+                    except ValueError as e:
+                        errores['lider1'] = str(e)
+
+                if nuevo_lider2_id is not None:
+                    try:
+                        nuevos_lideres['lider2'] = procesar_lider(nuevo_lider2_id, lideres_originales['lider2']) if nuevo_lider2_id != '' else None
+                    except ValueError as e:
+                        errores['lider2'] = str(e)
+
+                if errores:
+                    return JsonResponse({'error': 'Error en los líderes', 'detalles': errores}, status=400)
+
+                # 7. Validar que no sean la misma persona
+                if (nuevos_lideres.get('lider1') and nuevos_lideres.get('lider2') and 
+                    nuevos_lideres['lider1'].id_persona.id_persona == nuevos_lideres['lider2'].id_persona.id_persona):
+                    return JsonResponse({'error': 'Una persona no puede ser ambos líderes'}, status=400)
+
+                # 8. Desactivar líderes anteriores si fueron reemplazados
+                for rol, lider_original in lideres_originales.items():
+                    if lider_original and (rol in nuevos_lideres and nuevos_lideres[rol] != lider_original):
+                        # Verificar si el líder original ya no es líder en otro ministerio
+                        es_lider_en_otros = Ministerio.objects.filter(
+                            Q(id_lider1=lider_original) | Q(id_lider2=lider_original)
+                        ).exclude(id_ministerio=id_ministerio).exists()
+                        
+                        if not es_lider_en_otros:
+                            lider_original.activo = False
+                            lider_original.save()
+
+                # 9. Actualizar ministerio
+                if nombre is not None and nombre != '':
+                    # Verificar que el nuevo nombre no exista (excepto para este ministerio)
+                    if Ministerio.objects.filter(nombre__iexact=nombre).exclude(id_ministerio=id_ministerio).exists():
+                        return JsonResponse({'error': 'Ya existe un ministerio con este nombre'}, status=400)
+                    ministerio.nombre = nombre
+                
+                if descripcion is not None:
+                    ministerio.descripcion = descripcion
+                
+                if estado is not None and estado != '':
+                    ministerio.estado = estado
+                
+                if 'lider1' in nuevos_lideres:
+                    ministerio.id_lider1 = nuevos_lideres['lider1']
+                
+                if 'lider2' in nuevos_lideres:
+                    ministerio.id_lider2 = nuevos_lideres['lider2']
+                
+                ministerio.save()
+
+                # 10. Preparar respuesta
+                response_data = {
+                    'mensaje': 'Ministerio actualizado con éxito',
+                    'id_ministerio': ministerio.id_ministerio,
+                    'ministerio': ministerio.nombre,
+                    'cambios': {
+                        'nombre': nombre is not None,
+                        'descripcion': descripcion is not None,
+                        'estado': estado is not None,
+                        'lider1': nuevo_lider1_id is not None,
+                        'lider2': nuevo_lider2_id is not None
+                    }
+                }
+
+                return JsonResponse(response_data, status=200)
+
+        except Exception as e:
+            error_trace = traceback.format_exc()
+            return JsonResponse({'error': str(e), 'detalle': error_trace}, status=500)

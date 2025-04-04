@@ -28,6 +28,7 @@ CREATE TABLE usuarios (
     id_persona INT NOT NULL,
     usuario VARCHAR(50) NOT NULL UNIQUE,
     contrasenia VARCHAR(255) NOT NULL,
+    activo BOOLEAN NOT NULL DEFAULT TRUE,
     FOREIGN KEY (id_rol) REFERENCES rol(id_rol) ON DELETE CASCADE,
     FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE
 );

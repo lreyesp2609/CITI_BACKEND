@@ -36,6 +36,7 @@ class Usuario(models.Model):
     id_persona = models.ForeignKey(Persona, on_delete=models.DO_NOTHING, db_column='id_persona')
     usuario = models.CharField(max_length=50)
     contrasenia = models.CharField(max_length=255)
+    activo = models.BooleanField()
 
     class Meta:
         managed = False  
