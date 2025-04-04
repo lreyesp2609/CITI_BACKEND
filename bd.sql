@@ -32,3 +32,12 @@ CREATE TABLE usuarios (
     FOREIGN KEY (id_rol) REFERENCES rol(id_rol) ON DELETE CASCADE,
     FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE
 );
+
+CREATE TABLE ministerio (
+    id_ministerio SERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    estado VARCHAR(100),
+    id_lider1 INT REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
+    id_lider2 INT REFERENCES usuarios(id_usuario) ON DELETE SET NULL
+);

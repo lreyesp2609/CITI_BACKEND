@@ -25,7 +25,7 @@ class IniciarSesionView(View):
             nombre_usuario = request.POST.get('usuario')
             contrasenia = request.POST.get('contrasenia')
 
-            user = Usuario.objects.select_related('id_rol').filter(usuario=nombre_usuario).first()
+            user = Usuario.objects.select_related('id_rol', 'id_persona').filter(usuario=nombre_usuario).first()
 
             if user:
                 if check_password(contrasenia, user.contrasenia):
@@ -37,6 +37,8 @@ class IniciarSesionView(View):
                         'id_usuario': user.id_usuario,
                         'rol': user.id_rol.id_rol,
                         'nombre_rol': user.id_rol.rol,  # Agregado para mostrar el nombre del rol en el front
+                        'nombres': user.id_persona.nombres, 
+                        'apellidos': user.id_persona.apellidos,
                     })
                     
                     response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
