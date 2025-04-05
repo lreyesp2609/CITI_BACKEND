@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from Login.models import Persona, Rol
+from Login.models import Persona, Rol, Usuario
 from datetime import datetime
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -97,6 +97,13 @@ class DetallePersonaView(View):
             # Obtener la persona específica
             try:
                 persona = Persona.objects.get(id_persona=id_persona)
+
+                # Obtener el usuario relacionado y su rol
+                usuario = Usuario.objects.filter(id_persona=persona).first()
+                if usuario:
+                    rol = usuario.id_rol.rol  # Obtener el nombre del rol
+                else:
+                    rol = "Miembro"  # Si no tiene usuario asociado, asignamos "Miembro" por defecto
                 
                 # Convertir a diccionario para la respuesta JSON
                 persona_data = {
@@ -113,7 +120,8 @@ class DetallePersonaView(View):
                     'nacionalidad': persona.nacionalidad,
                     'profesion': persona.profesion,
                     'estado_civil': persona.estado_civil,
-                    'lugar_trabajo': persona.lugar_trabajo
+                    'lugar_trabajo': persona.lugar_trabajo,
+                    'rol': rol
                 }
                 
                 return JsonResponse({'persona': persona_data}, status=200)
