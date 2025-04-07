@@ -14,3 +14,11 @@ INSERT INTO usuarios (id_rol, id_persona, usuario, contrasenia)
 VALUES (1, currval('personas_id_persona_seq'), 'ktrianaa2', 'pbkdf2_sha256$720000$nA1DBiCSy5A4HPTMAfMGDx$MmlhOsKKop+XKgi48HY1WYVShwtU6vD1/nsc8bnk2Zo=');
 
 COMMIT;
+
+-- Insertar estados básicos
+INSERT INTO estado_evento (nombre, descripcion) VALUES 
+('Pendiente', 'Evento creado y pendiente de aprobación'),
+('Aprobado', 'Evento aprobado por los pastores'),
+('Rechazado', 'Evento rechazado por los pastores'),
+('Cancelado', 'Evento cancelado'),
+('Realizado', 'Evento completado satisfactoriamente');

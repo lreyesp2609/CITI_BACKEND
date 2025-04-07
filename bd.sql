@@ -41,3 +41,52 @@ CREATE TABLE ministerio (
     id_lider1 INT REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
     id_lider2 INT REFERENCES usuarios(id_usuario) ON DELETE SET NULL
 );
+
+-- Tabla de estados para eventos
+CREATE TABLE estado_evento (
+    id_estado SERIAL PRIMARY KEY,
+    nombre VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(255)
+);
+
+-- Tabla principal de eventos
+CREATE TABLE eventos (
+    id_evento SERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    id_ministerio INT NOT NULL,
+    descripcion TEXT,
+    fecha DATE NOT NULL,
+    hora TIME NOT NULL,
+    lugar VARCHAR(255),
+    id_usuario INT NOT NULL, -- Que crea el evento
+    id_estado INT NOT NULL DEFAULT 1, -- Por defecto Pendiente
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP,
+    FOREIGN KEY (id_ministerio) REFERENCES ministerio(id_ministerio) ON DELETE CASCADE,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    FOREIGN KEY (id_estado) REFERENCES estado_evento(id_estado) ON DELETE SET DEFAULT
+);
+
+-- Tabla de motivos para eventos (aprobaciones/rechazos)
+CREATE TABLE motivos_evento (
+    id_motivo SERIAL PRIMARY KEY,
+    id_evento INT NOT NULL,
+    id_usuario INT NOT NULL, -- Usuario que aprueba/rechaza
+    descripcion TEXT NOT NULL, -- Motivo de aprobación/rechazo
+    fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+    hora TIME NOT NULL DEFAULT CURRENT_TIME,
+    FOREIGN KEY (id_evento) REFERENCES eventos(id_evento) ON DELETE CASCADE,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE
+);
+
+-- Tabla para registro de participantes en eventos
+CREATE TABLE participantes_evento (
+    id_participacion SERIAL PRIMARY KEY,
+    id_evento INT NOT NULL,
+    id_usuario INT NOT NULL,
+    fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    asistencia BOOLEAN DEFAULT NULL, -- NULL=no confirmado, TRUE=asistió, FALSE=no asistió
+    FOREIGN KEY (id_evento) REFERENCES eventos(id_evento) ON DELETE CASCADE,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    UNIQUE (id_evento, id_usuario) -- Un usuario solo puede registrarse una vez por evento
+);
