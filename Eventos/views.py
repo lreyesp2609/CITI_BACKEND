@@ -234,8 +234,8 @@ class ListarEventosView(View):
             auth_header = request.headers.get('Authorization')
             if not auth_header:
                 return JsonResponse({'error': 'Token no proporcionado'}, status=400)
-
-            token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else auth_header
+                
+            token = auth_header.split('Bearer ')[1] if 'Bearer ' in auth_header else auth_header
 
             try:
                 jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])

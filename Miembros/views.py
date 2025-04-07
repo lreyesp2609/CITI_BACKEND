@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from Ministerio.models import Ministerio
 import jwt
 from django.conf import settings
 from django.http import JsonResponse
@@ -65,6 +66,102 @@ class ListarPersonasView(View):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarPersonasConUsuarioView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            # Verificación del token (igual que antes)
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+            else:
+                token = auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                rol_usuario = payload.get('rol')
+                
+                rol_id = Rol.objects.filter(rol=rol_usuario).first()
+                if not rol_id or rol_id.id_rol not in [1, 2]:
+                    return JsonResponse({'error': 'No tiene permisos para ver la lista de personas'}, status=403)
+                    
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+            
+            # Obtener todos los usuarios con sus personas relacionadas
+            usuarios = Usuario.objects.select_related('id_persona', 'id_rol').all()
+            
+            # Pre-cargar todos los ministerios para optimización
+            ministerios = Ministerio.objects.select_related('id_lider1', 'id_lider2').all()
+            
+            # Construir un diccionario de ministerios por usuario
+            ministerios_por_usuario = {}
+            for ministerio in ministerios:
+                if ministerio.id_lider1:
+                    if ministerio.id_lider1.id_usuario not in ministerios_por_usuario:
+                        ministerios_por_usuario[ministerio.id_lider1.id_usuario] = []
+                    ministerios_por_usuario[ministerio.id_lider1.id_usuario].append({
+                        'id_ministerio': ministerio.id_ministerio,
+                        'nombre': ministerio.nombre,
+                        'descripcion': ministerio.descripcion,
+                        'estado': ministerio.estado,
+                        'rol_lider': 'Líder 1'
+                    })
+                
+                if ministerio.id_lider2:
+                    if ministerio.id_lider2.id_usuario not in ministerios_por_usuario:
+                        ministerios_por_usuario[ministerio.id_lider2.id_usuario] = []
+                    ministerios_por_usuario[ministerio.id_lider2.id_usuario].append({
+                        'id_ministerio': ministerio.id_ministerio,
+                        'nombre': ministerio.nombre,
+                        'descripcion': ministerio.descripcion,
+                        'estado': ministerio.estado,
+                        'rol_lider': 'Líder 2'
+                    })
+            
+            # Construir la lista de personas con usuario y sus ministerios
+            personas_list = []
+            for usuario in usuarios:
+                persona = usuario.id_persona
+                ministerios_persona = ministerios_por_usuario.get(usuario.id_usuario, [])
+                
+                personas_list.append({
+                    'id_persona': persona.id_persona,
+                    'numero_cedula': persona.numero_cedula,
+                    'nombres': persona.nombres,
+                    'apellidos': persona.apellidos,
+                    'fecha_nacimiento': persona.fecha_nacimiento.strftime('%Y-%m-%d') if persona.fecha_nacimiento else None,
+                    'genero': persona.genero,
+                    'celular': persona.celular,
+                    'direccion': persona.direccion,
+                    'correo_electronico': persona.correo_electronico,
+                    'nivel_estudio': persona.nivel_estudio,
+                    'nacionalidad': persona.nacionalidad,
+                    'profesion': persona.profesion,
+                    'estado_civil': persona.estado_civil,
+                    'lugar_trabajo': persona.lugar_trabajo,
+                    'usuario': {
+                        'id_usuario': usuario.id_usuario,
+                        'nombre_usuario': usuario.usuario,
+                        'rol': usuario.id_rol.rol,
+                        'activo': usuario.activo
+                    },
+                    'ministerios': ministerios_persona
+                })
+            
+            # Ordenar por id_persona
+            personas_list.sort(key=lambda x: x['id_persona'])
+            
+            return JsonResponse({'personas_con_usuario': personas_list}, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+        
 @method_decorator(csrf_exempt, name='dispatch')
 class DetallePersonaView(View):
     def get(self, request, id_persona, *args, **kwargs):
