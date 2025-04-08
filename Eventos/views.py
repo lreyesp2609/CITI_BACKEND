@@ -297,7 +297,6 @@ class ObtenerEventoView(View):
                 'hora': evento.hora,
                 'lugar': evento.lugar,
                 'estado': evento.id_estado.nombre,
-                'id_ministerio': evento.id_ministerio,
                 'ministerio': evento.id_ministerio.nombre,
                 'usuario': f"{evento.id_usuario.id_persona.nombres} {evento.id_usuario.id_persona.apellidos}"
             }
