@@ -16,7 +16,7 @@ from django.db.models import Q
 class CrearMinisterioView(View):
     def post(self, request, *args, **kwargs):
         try:
-            # 1. Validación del token (igual que ListarPersonasView)
+            # 1. Validación del token
             auth_header = request.headers.get('Authorization')
             if not auth_header:
                 return JsonResponse({'error': 'Token no proporcionado'}, status=400)
@@ -26,6 +26,7 @@ class CrearMinisterioView(View):
             try:
                 payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
                 rol_usuario = payload.get('rol')
+                id_usuario_actual = payload.get('id_usuario')  # Necesitamos el ID del usuario actual
                 
                 rol_id = Rol.objects.filter(rol=rol_usuario).first()
                 if not rol_id or rol_id.id_rol not in [1, 2]:
@@ -48,8 +49,8 @@ class CrearMinisterioView(View):
             # 4. Procesar formdata
             descripcion = request.POST.get('descripcion')
             estado = request.POST.get('estado', 'Activo')
-            persona_lider1_id = request.POST.get('id_persona_lider1')  # Cambiado a id_persona
-            persona_lider2_id = request.POST.get('id_persona_lider2')  # Cambiado a id_persona
+            persona_lider1_id = request.POST.get('id_persona_lider1')
+            persona_lider2_id = request.POST.get('id_persona_lider2')
 
             with transaction.atomic():
                 # 5. Validar y convertir personas a líderes
@@ -60,12 +61,20 @@ class CrearMinisterioView(View):
                 if not rol_lider:
                     return JsonResponse({'error': 'Rol de líder no configurado'}, status=400)
 
-                # Función para crear usuario líder desde persona
-                def crear_usuario_lider(persona_id):
+                # Obtener el usuario actual si existe
+                usuario_actual = None
+                if id_usuario_actual:
+                    try:
+                        usuario_actual = Usuario.objects.get(id_usuario=id_usuario_actual)
+                    except Usuario.DoesNotExist:
+                        pass
+
+                # Función para crear/actualizar usuario líder
+                def crear_actualizar_usuario_lider(persona_id):
                     try:
                         persona = Persona.objects.get(id_persona=int(persona_id))
                         
-                        # Validar que todos los campos de la persona estén completos
+                        # Validar campos requeridos
                         campos_requeridos = [
                             persona.numero_cedula,
                             persona.fecha_nacimiento,
@@ -83,46 +92,72 @@ class CrearMinisterioView(View):
                         if any(campo is None or campo == '' for campo in campos_requeridos):
                             raise ValueError('Todos los datos de la persona deben estar completos para ser líder')
                         
-                        # Generar usuario y contraseña
-                        primer_nombre = persona.nombres.split()[0].lower()
-                        primer_apellido = persona.apellidos.split()[0].lower()
-                        username = f"{primer_nombre}.{primer_apellido}"
-                        password = make_password(persona.numero_cedula)
+                        # Buscar usuario existente para esta persona
+                        usuario_existente = Usuario.objects.filter(id_persona=persona).first()
                         
-                        # Crear usuario (si no existe)
-                        usuario, created = Usuario.objects.get_or_create(
-                            id_persona=persona,
-                            defaults={
-                                'id_rol': rol_lider,
-                                'usuario': username,
-                                'contrasenia': password,
-                                'activo': True  # Asegurar que esté activo al crearse
-                            }
-                        )
-                        
-                        if not created:
-                            # Si el usuario ya existe, actualizar a líder y asegurarse que esté activo
-                            usuario.id_rol = rol_lider
-                            usuario.activo = True
-                            usuario.save()
-                        
-                        return usuario
+                        if usuario_existente:
+                            # Si ya existe usuario
+                            rol_a_asignar = usuario_existente.id_rol
+                            
+                            # Verificar si es el usuario actual (Pastor)
+                            if usuario_actual and usuario_actual.id_persona.id_persona == persona.id_persona:
+                                # Mantener el rol actual (Pastor)
+                                rol_a_asignar = usuario_actual.id_rol
+                            else:
+                                # Si no es Pastor, asignar rol de líder (si no es ya Pastor)
+                                if usuario_existente.id_rol.id_rol != 1:
+                                    rol_a_asignar = rol_lider
+                            
+                            # Actualizar usuario existente
+                            usuario_existente.id_rol = rol_a_asignar
+                            usuario_existente.activo = True
+                            usuario_existente.save()
+                            
+                            return usuario_existente
+                        else:
+                            # Crear nuevo usuario
+                            primer_nombre = persona.nombres.split()[0].lower()
+                            primer_apellido = persona.apellidos.split()[0].lower()
+                            base_username = f"{primer_nombre}.{primer_apellido}"
+                            password = make_password(persona.numero_cedula)
+                            
+                            # Determinar rol (2 por defecto, 1 si es el usuario actual Pastor)
+                            rol_a_asignar = rol_lider
+                            if usuario_actual and usuario_actual.id_persona.id_persona == persona.id_persona:
+                                rol_a_asignar = usuario_actual.id_rol
+                            
+                            # Generar username único
+                            username = base_username
+                            counter = 1
+                            while Usuario.objects.filter(usuario=username).exists():
+                                username = f"{base_username}{counter}"
+                                counter += 1
+                            
+                            # Crear usuario
+                            usuario = Usuario.objects.create(
+                                id_persona=persona,
+                                id_rol=rol_a_asignar,
+                                usuario=username,
+                                contrasenia=password,
+                                activo=True
+                            )
+                            
+                            return usuario
                     
                     except Persona.DoesNotExist:
                         raise ValueError('Persona no encontrada')
-                    except IndexError:
-                        raise ValueError('El nombre o apellido no tiene el formato correcto')
                     except Exception as e:
                         raise ValueError(str(e))
 
                 # Procesar primer líder
                 if persona_lider1_id:
                     try:
-                        lider1 = crear_usuario_lider(persona_lider1_id)
+                        lider1 = crear_actualizar_usuario_lider(persona_lider1_id)
                         usuarios_creados['lider1'] = {
                             'id_usuario': lider1.id_usuario,
                             'usuario': lider1.usuario,
-                            'id_persona': lider1.id_persona.id_persona
+                            'id_persona': lider1.id_persona.id_persona,
+                            'rol': lider1.id_rol.rol
                         }
                     except ValueError as e:
                         return JsonResponse({'error': f'Líder 1 no válido: {str(e)}'}, status=400)
@@ -133,11 +168,12 @@ class CrearMinisterioView(View):
                         if persona_lider1_id and int(persona_lider2_id) == int(persona_lider1_id):
                             return JsonResponse({'error': 'Una persona no puede ser ambos líderes'}, status=400)
                         
-                        lider2 = crear_usuario_lider(persona_lider2_id)
+                        lider2 = crear_actualizar_usuario_lider(persona_lider2_id)
                         usuarios_creados['lider2'] = {
                             'id_usuario': lider2.id_usuario,
                             'usuario': lider2.usuario,
-                            'id_persona': lider2.id_persona.id_persona
+                            'id_persona': lider2.id_persona.id_persona,
+                            'rol': lider2.id_rol.rol
                         }
                     except ValueError as e:
                         return JsonResponse({'error': f'Líder 2 no válido: {str(e)}'}, status=400)
@@ -159,17 +195,13 @@ class CrearMinisterioView(View):
                 
                 if usuarios_creados:
                     response_data['lideres'] = usuarios_creados
-                    response_data['detalle_credenciales'] = {
-                        'formato_usuario': 'primer_nombre.primer_apellido',
-                        'formato_password': 'número_de_cédula'
-                    }
 
                 return JsonResponse(response_data, status=201)
 
         except Exception as e:
-            error_trace = traceback.format_exc()  # Captura el traceback completo
+            error_trace = traceback.format_exc()
             return JsonResponse({'error': str(e), 'detalle': error_trace}, status=500)
-
+        
 @method_decorator(csrf_exempt, name='dispatch')
 class ListarMinisteriosView(View):
     def get(self, request, *args, **kwargs):
@@ -252,6 +284,7 @@ class EditarMinisterioView(View):
             try:
                 payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
                 rol_usuario = payload.get('rol')
+                id_usuario_actual = payload.get('id_usuario')  # Necesitamos el ID del usuario actual
                 
                 rol_id = Rol.objects.filter(rol=rol_usuario).first()
                 if not rol_id or rol_id.id_rol not in [1, 2]:
@@ -283,7 +316,7 @@ class EditarMinisterioView(View):
                 }
                 
                 # 5. Función para manejar cambios de líderes
-                def procesar_lider(persona_id, lider_actual):
+                def procesar_lider(persona_id, lider_actual, usuario_actual=None):
                     if not persona_id:
                         return None
                     
@@ -308,29 +341,55 @@ class EditarMinisterioView(View):
                         if any(campo is None or campo == '' for campo in campos_requeridos):
                             raise ValueError('Todos los datos de la persona deben estar completos para ser líder')
                         
-                        # Buscar o crear usuario líder
-                        rol_lider = Rol.objects.get(id_rol=2)
-                        primer_nombre = persona.nombres.split()[0].lower()
-                        primer_apellido = persona.apellidos.split()[0].lower()
-                        username = f"{primer_nombre}.{primer_apellido}"
-                        password = make_password(persona.numero_cedula)
+                        # Buscar usuario existente para esta persona
+                        usuario_existente = Usuario.objects.filter(id_persona=persona).first()
                         
-                        usuario, created = Usuario.objects.get_or_create(
-                            id_persona=persona,
-                            defaults={
-                                'id_rol': rol_lider,
-                                'usuario': username,
-                                'contrasenia': password,
-                                'activo': True
-                            }
-                        )
-                        
-                        if not created:
-                            usuario.id_rol = rol_lider
-                            usuario.activo = True
-                            usuario.save()
+                        if usuario_existente:
+                            # Si ya existe un usuario para esta persona, lo actualizamos
+                            rol_lider = Rol.objects.get(id_rol=2)
                             
-                        return usuario
+                            # Verificar si el usuario actual (Pastor) está siendo asignado como líder
+                            if usuario_actual and usuario_actual.id_persona.id_persona == persona.id_persona:
+                                # Si el usuario actual es Pastor (rol 1), mantener su rol
+                                rol_lider = usuario_actual.id_rol
+                            
+                            # Actualizar el usuario existente
+                            if usuario_existente.id_rol.id_rol != 1:  # No cambiar el rol si ya es Pastor
+                                usuario_existente.id_rol = rol_lider
+                            usuario_existente.activo = True
+                            usuario_existente.save()
+                            
+                            return usuario_existente
+                        else:
+                            # Si no existe usuario, crear uno nuevo con username único
+                            rol_lider = Rol.objects.get(id_rol=2)
+                            primer_nombre = persona.nombres.split()[0].lower()
+                            primer_apellido = persona.apellidos.split()[0].lower()
+                            base_username = f"{primer_nombre}.{primer_apellido}"
+                            password = make_password(persona.numero_cedula)
+                            
+                            # Verificar si el usuario actual (Pastor) está siendo asignado como líder
+                            if usuario_actual and usuario_actual.id_persona.id_persona == persona.id_persona:
+                                # Si el usuario actual es Pastor (rol 1), mantener su rol
+                                rol_lider = usuario_actual.id_rol
+                            
+                            # Generar username único
+                            username = base_username
+                            counter = 1
+                            while Usuario.objects.filter(usuario=username).exists():
+                                username = f"{base_username}{counter}"
+                                counter += 1
+                            
+                            # Crear nuevo usuario
+                            usuario = Usuario.objects.create(
+                                id_persona=persona,
+                                id_rol=rol_lider,
+                                usuario=username,
+                                contrasenia=password,
+                                activo=True
+                            )
+                            
+                            return usuario
                     
                     except Exception as e:
                         raise ValueError(str(e))
@@ -339,15 +398,23 @@ class EditarMinisterioView(View):
                 nuevos_lideres = {}
                 errores = {}
                 
+                # Obtener el usuario actual si existe
+                usuario_actual = None
+                if id_usuario_actual:
+                    try:
+                        usuario_actual = Usuario.objects.get(id_usuario=id_usuario_actual)
+                    except Usuario.DoesNotExist:
+                        pass
+                
                 if nuevo_lider1_id is not None:  # None significa que no se envió, '' significa que se quiere quitar
                     try:
-                        nuevos_lideres['lider1'] = procesar_lider(nuevo_lider1_id, lideres_originales['lider1']) if nuevo_lider1_id != '' else None
+                        nuevos_lideres['lider1'] = procesar_lider(nuevo_lider1_id, lideres_originales['lider1'], usuario_actual) if nuevo_lider1_id != '' else None
                     except ValueError as e:
                         errores['lider1'] = str(e)
 
                 if nuevo_lider2_id is not None:
                     try:
-                        nuevos_lideres['lider2'] = procesar_lider(nuevo_lider2_id, lideres_originales['lider2']) if nuevo_lider2_id != '' else None
+                        nuevos_lideres['lider2'] = procesar_lider(nuevo_lider2_id, lideres_originales['lider2'], usuario_actual) if nuevo_lider2_id != '' else None
                     except ValueError as e:
                         errores['lider2'] = str(e)
 
