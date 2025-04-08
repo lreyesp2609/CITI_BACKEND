@@ -255,6 +255,7 @@ class ListarEventosView(View):
                     'hora': e.hora,
                     'lugar': e.lugar,
                     'estado': e.id_estado.nombre,
+                    'id_ministerio': e.id_ministerio.id_ministerio,
                     'ministerio': e.id_ministerio.nombre,
                     'usuario': f"{e.id_usuario.id_persona.nombres} {e.id_usuario.id_persona.apellidos}"
                 }
@@ -297,6 +298,7 @@ class ObtenerEventoView(View):
                 'hora': evento.hora,
                 'lugar': evento.lugar,
                 'estado': evento.id_estado.nombre,
+                'id_ministerio': evento.id_ministerio.id_ministerio,
                 'ministerio': evento.id_ministerio.nombre,
                 'usuario': f"{evento.id_usuario.id_persona.nombres} {evento.id_usuario.id_persona.apellidos}"
             }
