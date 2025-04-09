@@ -337,3 +337,62 @@ class ActualizarPersonaView(View):
         except Exception as e:
             # Si ocurre cualquier error, la transacción hace rollback automáticamente
             return JsonResponse({'error': str(e)}, status=500)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarPersonasSinUsuarioView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            # Obtener token del encabezado Authorization
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            # Extraer el token si viene con el prefijo Bearer
+            if auth_header.startswith('Bearer '):
+                token = auth_header.split(' ')[1]
+            else:
+                token = auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                rol_usuario = payload.get('rol')
+                
+                # Verificar si el rol está permitido (solo roles 1 y 2)
+                rol_id = Rol.objects.filter(rol=rol_usuario).first()
+                if not rol_id or rol_id.id_rol not in [1, 2]:
+                    return JsonResponse({'error': 'No tiene permisos para ver la lista de personas'}, status=403)
+                    
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+            
+            # Obtener todas las personas que NO tienen usuario asociado
+            personas_sin_usuario = Persona.objects.exclude(
+                id_persona__in=Usuario.objects.values('id_persona')
+            ).order_by('id_persona')
+            
+            # Convertir a lista de diccionarios para la respuesta JSON
+            personas_list = []
+            for persona in personas_sin_usuario:
+                personas_list.append({
+                    'id_persona': persona.id_persona,
+                    'numero_cedula': persona.numero_cedula,
+                    'nombres': persona.nombres,
+                    'apellidos': persona.apellidos,
+                    'fecha_nacimiento': persona.fecha_nacimiento.strftime('%Y-%m-%d') if persona.fecha_nacimiento else None,
+                    'genero': persona.genero,
+                    'celular': persona.celular,
+                    'direccion': persona.direccion,
+                    'correo_electronico': persona.correo_electronico,
+                    'nivel_estudio': persona.nivel_estudio,
+                    'nacionalidad': persona.nacionalidad,
+                    'profesion': persona.profesion,
+                    'estado_civil': persona.estado_civil,
+                    'lugar_trabajo': persona.lugar_trabajo
+                })
+            
+            return JsonResponse({'personas_sin_usuario': personas_list}, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
