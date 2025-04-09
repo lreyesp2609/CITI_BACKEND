@@ -240,6 +240,7 @@ class ListarMinisteriosView(View):
                 lider1_data = None
                 if ministerio.id_lider1:
                     lider1_data = {
+                        'id_persona': ministerio.id_lider1.id_persona.id_persona,
                         'id_usuario': ministerio.id_lider1.id_usuario,
                         'nombres': ministerio.id_lider1.id_persona.nombres,
                         'apellidos': ministerio.id_lider1.id_persona.apellidos,
@@ -250,6 +251,7 @@ class ListarMinisteriosView(View):
                 lider2_data = None
                 if ministerio.id_lider2:
                     lider2_data = {
+                        'id_persona': ministerio.id_lider2.id_persona.id_persona,
                         'id_usuario': ministerio.id_lider2.id_usuario,
                         'nombres': ministerio.id_lider2.id_persona.nombres,
                         'apellidos': ministerio.id_lider2.id_persona.apellidos,
