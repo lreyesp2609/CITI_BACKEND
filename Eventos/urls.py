@@ -7,5 +7,6 @@ urlpatterns = [
     path('cancelar/<int:id_evento>/', CancelarEventoView.as_view(), name='cancelar_evento'),
     path('aprobar-rechazar/<int:id_evento>/', AprobarRechazarEventoView.as_view(), name='aprobar_rechazar_evento'),
     path('eventos/', ListarEventosView.as_view(), name='listar_eventos'),
-    path('eventos/<int:id_evento>/', ObtenerEventoView.as_view(), name='obtener_evento'),
+    path('detalle_eventos/<int:id_evento>/', ObtenerEventoView.as_view(), name='obtener_evento'),
+    path('mis_eventos/', ListarMisEventosView.as_view(), name='listar_mis_eventos'),
 ]

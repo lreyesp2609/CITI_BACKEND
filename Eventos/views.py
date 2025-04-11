@@ -5,11 +5,13 @@ from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-from .models import Evento, EstadoEvento, MotivosEvento
-from Login.models import Usuario, Rol
+from .models import Evento, MotivosEvento
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CrearEventoView(View):
+    ESTADO_PENDIENTE = 1
+    ESTADO_APROBADO = 2
+    
     def post(self, request, *args, **kwargs):
         try:
             auth_header = request.headers.get('Authorization')
@@ -21,7 +23,15 @@ class CrearEventoView(View):
             try:
                 payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
                 id_usuario = payload.get('id_usuario')
-                rol_id = payload.get('rol')
+                rol = payload.get('rol')  # Cambiado de rol_id a rol
+                
+                # Verificación adicional para el rol
+                if rol == "Pastor":
+                    rol_id = 1
+                else:
+                    # Aquí puedes mapear otros roles si es necesario
+                    rol_id = 2  # O cualquier otro valor por defecto
+                    
             except jwt.ExpiredSignatureError:
                 return JsonResponse({'error': 'Token expirado'}, status=401)
             except jwt.InvalidTokenError:
@@ -33,7 +43,7 @@ class CrearEventoView(View):
                     return JsonResponse({'error': f'El campo {field} es obligatorio'}, status=400)
 
             with transaction.atomic():
-                estado_inicial = 2 if rol_id == 1 else 1
+                estado_inicial = self.ESTADO_APROBADO if rol_id == 1 else self.ESTADO_PENDIENTE
 
                 evento = Evento.objects.create(
                     nombre=request.POST['nombre'],
@@ -53,15 +63,16 @@ class CrearEventoView(View):
                         descripcion="Aprobado automáticamente por pastor"
                     )
 
+                estado_texto = "Aprobado" if rol_id == 1 else "Pendiente"
                 return JsonResponse({
                     'mensaje': 'Evento creado exitosamente',
                     'id_evento': evento.id_evento,
-                    'estado': 'Aprobado' if rol_id == 1 else 'Pendiente'
+                    'estado': estado_texto
                 }, status=201)
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-
+        
 @method_decorator(csrf_exempt, name='dispatch')
 class EditarEventoView(View):
     def post(self, request, id_evento, *args, **kwargs):
@@ -134,18 +145,20 @@ class CancelarEventoView(View):
             except jwt.InvalidTokenError:
                 return JsonResponse({'error': 'Token inválido'}, status=401)
 
-            if 'id_evento' not in request.POST:
-                return JsonResponse({'error': 'ID de evento es obligatorio'}, status=400)
-
             with transaction.atomic():
                 try:
                     evento = Evento.objects.get(id_evento=id_evento)
                 except Evento.DoesNotExist:
                     return JsonResponse({'error': 'Evento no encontrado'}, status=404)
 
+                # Verificación de que el usuario es el creador del evento
                 if evento.id_usuario_id != usuario_id:
-                    return JsonResponse({'error': 'No tiene permisos para cancelar este evento'}, status=403)
+                    return JsonResponse(
+                        {'error': 'Solo el creador del evento puede cancelarlo/reactivarlo'}, 
+                        status=403
+                    )
 
+                # Lógica para determinar nuevo estado
                 if evento.id_estado_id == 4:
                     nuevo_estado = 1
                     mensaje = 'Evento reactivado exitosamente'
@@ -159,7 +172,7 @@ class CancelarEventoView(View):
                 MotivosEvento.objects.create(
                     id_evento=evento,
                     id_usuario_id=usuario_id,
-                    descripcion=request.POST.get('motivo', 'Cancelado/reactivado por usuario')
+                    descripcion=request.POST.get('motivo', 'Cancelado/reactivado por el creador')
                 )
 
                 return JsonResponse({
@@ -244,7 +257,8 @@ class ListarEventosView(View):
             except jwt.InvalidTokenError:
                 return JsonResponse({'error': 'Token inválido'}, status=401)
 
-            eventos = Evento.objects.all().order_by('-fecha')
+            # Cambiado: ordenar por id_evento ascendente (de menor a mayor)
+            eventos = Evento.objects.all().order_by('id_evento')
 
             eventos_data = [
                 {
@@ -304,6 +318,49 @@ class ObtenerEventoView(View):
             }
 
             return JsonResponse({'evento': data}, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarMisEventosView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            # Autenticación
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            token = auth_header.split('Bearer ')[1] if 'Bearer ' in auth_header else auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                usuario_id = payload.get('id_usuario')
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+
+            # Filtrar eventos solo del usuario actual y ordenar por id_evento ascendente
+            eventos = Evento.objects.filter(id_usuario_id=usuario_id).order_by('id_evento')
+
+            eventos_data = [
+                {
+                    'id_evento': e.id_evento,
+                    'nombre': e.nombre,
+                    'descripcion': e.descripcion,
+                    'fecha': e.fecha.strftime('%Y-%m-%d') if e.fecha else None,
+                    'hora': e.hora.strftime('%H:%M:%S') if e.hora else None,
+                    'lugar': e.lugar,
+                    'estado': e.id_estado.nombre if e.id_estado else None,
+                    'id_ministerio': e.id_ministerio.id_ministerio if e.id_ministerio else None,
+                    'ministerio': e.id_ministerio.nombre if e.id_ministerio else None,
+                    'usuario': f"{e.id_usuario.id_persona.nombres} {e.id_usuario.id_persona.apellidos}" if e.id_usuario and e.id_usuario.id_persona else None
+                }
+                for e in eventos
+            ]
+
+            return JsonResponse({'eventos': eventos_data, 'total': len(eventos_data)}, status=200)
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
