@@ -364,3 +364,51 @@ class ListarMisEventosView(View):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarEventosOtrosUsuariosView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            # Autenticación
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            token = auth_header.split('Bearer ')[1] if 'Bearer ' in auth_header else auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                usuario_id = payload.get('id_usuario')
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+
+            # Filtrar eventos que NO son del usuario actual y ordenar por id_evento ascendente
+            eventos = Evento.objects.exclude(id_usuario_id=usuario_id).order_by('id_evento')
+
+            eventos_data = [
+                {
+                    'id_evento': e.id_evento,
+                    'nombre': e.nombre,
+                    'descripcion': e.descripcion,
+                    'fecha': e.fecha.strftime('%Y-%m-%d') if e.fecha else None,
+                    'hora': e.hora.strftime('%H:%M:%S') if e.hora else None,
+                    'lugar': e.lugar,
+                    'estado': e.id_estado.nombre if e.id_estado else None,
+                    'id_ministerio': e.id_ministerio.id_ministerio if e.id_ministerio else None,
+                    'ministerio': e.id_ministerio.nombre if e.id_ministerio else None,
+                    'usuario': f"{e.id_usuario.id_persona.nombres} {e.id_usuario.id_persona.apellidos}" if e.id_usuario and e.id_usuario.id_persona else None,
+                    'es_mio': False  # Agregamos este campo para identificar que no es del usuario
+                }
+                for e in eventos
+            ]
+
+            return JsonResponse({
+                'eventos': eventos_data,
+                'total': len(eventos_data),
+                'mensaje': 'Eventos de otros usuarios obtenidos correctamente'
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)

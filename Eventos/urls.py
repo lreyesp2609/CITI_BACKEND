@@ -9,4 +9,5 @@ urlpatterns = [
     path('eventos/', ListarEventosView.as_view(), name='listar_eventos'),
     path('detalle_eventos/<int:id_evento>/', ObtenerEventoView.as_view(), name='obtener_evento'),
     path('mis_eventos/', ListarMisEventosView.as_view(), name='listar_mis_eventos'),
+    path('evetos_usuarios/', ListarEventosOtrosUsuariosView.as_view(), name='listar_eventos_otros_usuarios'),
 ]
