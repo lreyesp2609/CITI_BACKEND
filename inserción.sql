@@ -21,4 +21,5 @@ INSERT INTO estado_evento (nombre, descripcion) VALUES
 ('Aprobado', 'Evento aprobado por los pastores'),
 ('Rechazado', 'Evento rechazado por los pastores'),
 ('Cancelado', 'Evento cancelado'),
-('Realizado', 'Evento completado satisfactoriamente');
+('Realizado', 'Evento completado satisfactoriamente'),
+('Pospuesto', 'Evento pospuesto para otra fecha');

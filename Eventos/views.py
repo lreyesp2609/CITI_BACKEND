@@ -1,3 +1,4 @@
+import json
 import jwt
 from django.db import transaction
 from django.views import View
@@ -151,19 +152,18 @@ class CancelarEventoView(View):
                 except Evento.DoesNotExist:
                     return JsonResponse({'error': 'Evento no encontrado'}, status=404)
 
-                # Verificación de que el usuario es el creador del evento
                 if evento.id_usuario_id != usuario_id:
                     return JsonResponse(
                         {'error': 'Solo el creador del evento puede cancelarlo/reactivarlo'}, 
                         status=403
                     )
 
-                # Lógica para determinar nuevo estado
-                if evento.id_estado_id == 4:
-                    nuevo_estado = 1
-                    mensaje = 'Evento reactivado exitosamente'
-                else:
-                    nuevo_estado = 4
+                # Nueva lógica de estados
+                if evento.id_estado_id == 4:  # Si está cancelado
+                    nuevo_estado = 2  # Cambiar a aprobado (asumiendo que 2 es aprobado)
+                    mensaje = 'Evento reactivado y aprobado exitosamente'
+                else:  # Para cualquier otro estado
+                    nuevo_estado = 4  # Cambiar a cancelado
                     mensaje = 'Evento cancelado exitosamente'
 
                 evento.id_estado_id = nuevo_estado
@@ -178,7 +178,7 @@ class CancelarEventoView(View):
                 return JsonResponse({
                     'mensaje': mensaje,
                     'id_evento': evento.id_evento,
-                    'estado': 'Cancelado' if nuevo_estado == 4 else 'Pendiente'
+                    'estado': 'Aprobado' if nuevo_estado == 2 else 'Cancelado'
                 })
 
         except Exception as e:
@@ -188,6 +188,7 @@ class CancelarEventoView(View):
 class AprobarRechazarEventoView(View):
     def post(self, request, id_evento, *args, **kwargs):
         try:
+            # Verificación de token y autenticación
             auth_header = request.headers.get('Authorization')
             if not auth_header:
                 return JsonResponse({'error': 'Token no proporcionado'}, status=400)
@@ -197,47 +198,105 @@ class AprobarRechazarEventoView(View):
             try:
                 payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
                 usuario_id = payload.get('id_usuario')
-                rol_id = payload.get('rol')
+                rol_nombre = payload.get('rol')
             except jwt.ExpiredSignatureError:
                 return JsonResponse({'error': 'Token expirado'}, status=401)
             except jwt.InvalidTokenError:
                 return JsonResponse({'error': 'Token inválido'}, status=401)
 
-            if rol_id not in [1, 2]:
-                return JsonResponse({'error': 'No tiene permisos para aprobar/rechazar eventos'}, status=403)
-
-            required_fields = ['id_evento', 'accion', 'motivo']
-            for field in required_fields:
-                if field not in request.POST:
-                    return JsonResponse({'error': f'El campo {field} es obligatorio'}, status=400)
-
-            if request.POST['accion'] not in ['aprobar', 'rechazar']:
-                return JsonResponse({'error': 'Acción debe ser "aprobar" o "rechazar"'}, status=400)
+            # Verificar si es Pastor
+            if rol_nombre != 'Pastor':
+                return JsonResponse({'error': 'No tiene permisos para esta acción'}, status=403)
 
             with transaction.atomic():
+                try:
+                    data = json.loads(request.body)
+                    accion = data.get('accion', '').lower()
+                    motivo = data.get('motivo', '')
+                except json.JSONDecodeError:
+                    return JsonResponse({'error': 'Formato JSON inválido'}, status=400)
+
+                # Validar acciones permitidas
+                valid_actions = ['aprobar', 'rechazar', 'cancelar', 'posponer']
+                if accion not in valid_actions:
+                    return JsonResponse({
+                        'error': 'Acción inválida',
+                        'detalle': f'Valores permitidos: {", ".join(valid_actions)}'
+                    }, status=400)
+
                 try:
                     evento = Evento.objects.get(id_evento=id_evento)
                 except Evento.DoesNotExist:
                     return JsonResponse({'error': 'Evento no encontrado'}, status=404)
 
-                nuevo_estado = 2 if request.POST['accion'] == 'aprobar' else 3
-                evento.id_estado_id = nuevo_estado
+                # Mapeo de estados y validaciones
+                state_mapping = {
+                    'aprobar': {
+                        'allowed_states': [1, 6],  # Pendiente o Pospuesto
+                        'new_state': 2,  # Aprobado
+                        'error_msg': 'Solo se pueden aprobar eventos pendientes o pospuestos'
+                    },
+                    'rechazar': {
+                        'allowed_states': [1, 6],  # Pendiente o Pospuesto
+                        'new_state': 3,  # Rechazado
+                        'error_msg': 'Solo se pueden rechazar eventos pendientes o pospuestos'
+                    },
+                    'cancelar': {
+                        'allowed_states': [2],  # Aprobado
+                        'new_state': 4,  # Cancelado
+                        'error_msg': 'Solo se pueden cancelar eventos aprobados'
+                    },
+                    'posponer': {
+                        'allowed_states': [1],  # Pendiente
+                        'new_state': 6,  # Pospuesto
+                        'error_msg': 'Solo se pueden posponer eventos pendientes'
+                    }
+                }
+
+                action_config = state_mapping.get(accion)
+                if evento.id_estado_id not in action_config['allowed_states']:
+                    return JsonResponse({
+                        'error': 'Acción no permitida',
+                        'detalle': action_config['error_msg']
+                    }, status=400)
+
+                # Actualizar estado del evento
+                evento.id_estado_id = action_config['new_state']
                 evento.save()
+
+                # Registrar motivo
+                estado_nombre = {
+                    2: 'Aprobado',
+                    3: 'Rechazado',
+                    4: 'Cancelado',
+                    6: 'Pospuesto'
+                }.get(action_config['new_state'], 'Desconocido')
 
                 MotivosEvento.objects.create(
                     id_evento=evento,
                     id_usuario_id=usuario_id,
-                    descripcion=request.POST['motivo']
+                    descripcion=motivo or f"Evento {estado_nombre.lower()}"
                 )
 
                 return JsonResponse({
-                    'mensaje': f"Evento {request.POST['accion']}ado exitosamente",
+                    'mensaje': f"Evento {estado_nombre.lower()} exitosamente",
                     'id_evento': evento.id_evento,
-                    'estado': 'Aprobado' if nuevo_estado == 2 else 'Rechazado'
+                    'estado': estado_nombre
                 })
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
+
+
+
+
+
+
+
+
+
+        
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ListarEventosView(View):
