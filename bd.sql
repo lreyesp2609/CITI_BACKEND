@@ -90,3 +90,15 @@ CREATE TABLE participantes_evento (
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
     UNIQUE (id_evento, id_usuario) -- Un usuario solo puede registrarse una vez por evento
 );
+
+CREATE TABLE notificaciones (
+    id_notificacion SERIAL PRIMARY KEY,
+    id_evento INTEGER REFERENCES eventos(id_evento) ON DELETE CASCADE,
+    id_usuario_remitente INTEGER REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    id_usuario_destino INTEGER REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
+    tipo VARCHAR(50) NOT NULL, -- 'solicitud_cancelacion', 'aprobacion', 'rechazo'
+    mensaje TEXT NOT NULL,
+    leida BOOLEAN DEFAULT FALSE,
+    fecha_creacion TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    accion_tomada BOOLEAN -- TRUE=aprobada, FALSE=rechazada, NULL=pendiente
+);
