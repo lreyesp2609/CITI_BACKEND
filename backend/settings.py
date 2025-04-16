@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     'Ministerio',
     'Eventos',
     'Roles',
+    'Ciclos',
+    'Cursos',
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',

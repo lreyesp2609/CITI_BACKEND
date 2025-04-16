@@ -90,3 +90,87 @@ CREATE TABLE participantes_evento (
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
     UNIQUE (id_evento, id_usuario) -- Un usuario solo puede registrarse una vez por evento
 );
+
+-- Ciclos (Ej: Semestre 1-2025)
+CREATE TABLE ciclo (
+    id_ciclo SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT
+);
+
+-- Cursos
+CREATE TABLE curso (
+    id_curso SERIAL PRIMARY KEY,
+    nombre VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    fecha_inicio DATE,
+    fecha_fin DATE,
+    hora_inicio TIME,
+    hora_fin TIME,
+    id_ciclo INT REFERENCES ciclo(id_ciclo) ON DELETE SET NULL,
+    id_usuario INT NOT NULL,
+    FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE
+);
+
+-- Participantes inscritos a un curso
+CREATE TABLE curso_participante (
+    id_participante SERIAL PRIMARY KEY,
+    id_curso INT NOT NULL,
+    id_persona INT NOT NULL,
+    fecha_inscripcion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE,
+    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE, 
+    UNIQUE (id_curso, id_persona)
+);
+
+-- Asistencias a un curso por fecha
+CREATE TABLE asistencia_curso (
+    id_asistencia SERIAL PRIMARY KEY,
+    id_curso INT NOT NULL,
+    id_persona INT NOT NULL,
+    fecha DATE NOT NULL,
+    presente BOOLEAN NOT NULL,
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE,
+    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE 
+);
+
+-- Tipos de tareas (pueden variar por curso)
+CREATE TABLE tipo_tarea (
+    id_tipo SERIAL PRIMARY KEY,
+    id_curso INT NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE
+);
+
+-- Rúbrica de evaluación por curso
+CREATE TABLE rubrica (
+    id_rubrica SERIAL PRIMARY KEY,
+    id_curso INT NOT NULL,
+    nombre_criterio VARCHAR(100) NOT NULL,
+    porcentaje NUMERIC(5,2) NOT NULL CHECK (porcentaje >= 0 AND porcentaje <= 100),
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE
+);
+
+-- Tareas del curso
+CREATE TABLE tarea (
+    id_tarea SERIAL PRIMARY KEY,
+    id_curso INT NOT NULL,
+    id_tipo INT NOT NULL,
+    titulo VARCHAR(255) NOT NULL,
+    descripcion TEXT,
+    fecha_entrega DATE,
+    FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE,
+    FOREIGN KEY (id_tipo) REFERENCES tipo_tarea(id_tipo) ON DELETE CASCADE
+);
+
+-- Calificaciones por tarea y criterio
+CREATE TABLE calificacion (
+    id_calificacion SERIAL PRIMARY KEY,
+    id_tarea INT NOT NULL,
+    id_persona INT NOT NULL, 
+    id_criterio INT NOT NULL,
+    nota NUMERIC(5,2) NOT NULL CHECK (nota >= 0 AND nota <= 10),
+    FOREIGN KEY (id_tarea) REFERENCES tarea(id_tarea) ON DELETE CASCADE,
+    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE, 
+    FOREIGN KEY (id_criterio) REFERENCES rubrica(id_rubrica) ON DELETE CASCADE
+);
