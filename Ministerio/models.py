@@ -9,7 +9,11 @@ class Ministerio(models.Model):
     estado = models.CharField(blank=True, null=True)
     id_lider1 = models.ForeignKey(Usuario, models.DO_NOTHING, db_column='id_lider1', blank=True, null=True)
     id_lider2 = models.ForeignKey(Usuario, models.DO_NOTHING, db_column='id_lider2', related_name='ministerio_id_lider2_set', blank=True, null=True)
-
+    imagen_path = models.ImageField( upload_to='ministerios/imagenes/',
+        blank=True,
+        null=True,
+        max_length=255
+    )
     class Meta:
         managed = False
         db_table = 'ministerio'

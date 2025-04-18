@@ -38,6 +38,7 @@ CREATE TABLE ministerio (
     nombre VARCHAR(255) NOT NULL,
     descripcion TEXT,
     estado VARCHAR(100),
+    imagen_path VARCHAR(255),
     id_lider1 INT REFERENCES usuarios(id_usuario) ON DELETE SET NULL,
     id_lider2 INT REFERENCES usuarios(id_usuario) ON DELETE SET NULL
 );
