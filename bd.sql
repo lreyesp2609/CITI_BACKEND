@@ -65,7 +65,8 @@ CREATE TABLE eventos (
     fecha_actualizacion TIMESTAMP,
     FOREIGN KEY (id_ministerio) REFERENCES ministerio(id_ministerio) ON DELETE CASCADE,
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
-    FOREIGN KEY (id_estado) REFERENCES estado_evento(id_estado) ON DELETE SET DEFAULT
+    FOREIGN KEY (id_estado) REFERENCES estado_evento(id_estado) ON DELETE SET DEFAULT,
+    FOREIGN KEY (id_tipo_evento) REFERENCES tipo_evento(id_tipo_evento) ON DELETE SET NULL
 );
 
 -- Tabla de motivos para eventos (aprobaciones/rechazos)
@@ -102,4 +103,11 @@ CREATE TABLE notificaciones (
     leida BOOLEAN DEFAULT FALSE,
     fecha_creacion TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     accion_tomada BOOLEAN -- TRUE=aprobada, FALSE=rechazada, NULL=pendiente
+);
+
+CREATE TABLE tipo_evento (
+    id_tipo_evento SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion VARCHAR(255),
+    activo BOOLEAN DEFAULT TRUE
 );

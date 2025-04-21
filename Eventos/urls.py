@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 from .views import *
 from . import views
 
@@ -14,4 +14,11 @@ urlpatterns = [
     path('notificaciones/', NotificacionesView.as_view(), name='notificaciones'),
     path('notificaciones/respuesta/', ResponderNotificacionView.as_view(), name='responder_notificacion'),
     path('notificaciones/marcar_leida/', views.MarcarNotificacionLeidaView.as_view(), name='marcar_notificacion_leida'),
+    path('tipos_evento/', include([path('crear/', CrearTipoEventoView.as_view(), name='crear_tipo_evento'),
+                                   path('listar/', ListarTiposEventoView.as_view(), name='listar_tipos_evento'),
+                                   path('editar/<int:id_tipo_evento>/', EditarTipoEventoView.as_view(), name='editar_tipo_evento'),
+                                   path('cambiar_estado/<int:id_tipo_evento>/', CambiarEstadoTipoEventoView.as_view(), name='cambiar_estado_tipo_evento'),
+
+
+])),
 ]

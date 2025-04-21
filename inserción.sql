@@ -23,3 +23,10 @@ INSERT INTO estado_evento (nombre, descripcion) VALUES
 ('Cancelado', 'Evento cancelado'),
 ('Realizado', 'Evento completado satisfactoriamente'),
 ('Pospuesto', 'Evento pospuesto para otra fecha');
+
+INSERT INTO tipo_evento (nombre, descripcion) VALUES 
+('Seminario', 'Evento educativo o de formación'),
+('Movilización', 'Evento de acción social o comunitaria'),
+('Congreso', 'Evento masivo con múltiples actividades'),
+('Conferencia', 'Evento con uno o varios expositores'),
+('Taller', 'Evento práctico de aprendizaje');

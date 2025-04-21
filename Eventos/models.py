@@ -1,8 +1,20 @@
 from django.db import models
-from Login.models import Persona, Usuario
+from Login.models import Usuario
 from Ministerio.models import Ministerio
 from django.utils import timezone
 
+class TipoEvento(models.Model):
+    id_tipo_evento = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=100)
+    descripcion = models.CharField(max_length=255, blank=True, null=True)
+    activo = models.BooleanField(default=True)  # Siempre se crea activo por defecto
+
+    class Meta:
+        db_table = 'tipo_evento'
+
+    def __str__(self):
+        return self.nombre
+    
 class EstadoEvento(models.Model):
     id_estado = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=50)
@@ -24,6 +36,7 @@ class Evento(models.Model):
     id_estado = models.ForeignKey(EstadoEvento, models.DO_NOTHING, db_column='id_estado', default=1)  # Pendiente por defecto
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
+    id_tipo_evento = models.ForeignKey(TipoEvento, models.DO_NOTHING, db_column='id_tipo_evento', blank=True, null=True)
 
     class Meta:
         managed = False
@@ -73,3 +86,4 @@ class Notificaciones(models.Model):
         if not self.fecha_creacion:  # Solo si es nuevo
             self.fecha_creacion = timezone.now()
         super().save(*args, **kwargs)
+
