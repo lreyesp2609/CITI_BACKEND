@@ -1,3 +1,4 @@
+import os
 from django.shortcuts import render
 import jwt
 from django.conf import settings
@@ -11,6 +12,17 @@ from django.db import transaction
 from django.contrib.auth.hashers import make_password
 import traceback
 from django.db.models import Q 
+
+import os
+import jwt
+import traceback
+from django.db import transaction
+from django.http import JsonResponse
+from django.views import View
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.conf import settings
+from django.contrib.auth.hashers import make_password
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CrearMinisterioView(View):
@@ -26,7 +38,7 @@ class CrearMinisterioView(View):
             try:
                 payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
                 rol_usuario = payload.get('rol')
-                id_usuario_actual = payload.get('id_usuario')  # Necesitamos el ID del usuario actual
+                id_usuario_actual = payload.get('id_usuario')
                 
                 rol_id = Rol.objects.filter(rol=rol_usuario).first()
                 if not rol_id or rol_id.id_rol not in [1, 2]:
@@ -46,14 +58,27 @@ class CrearMinisterioView(View):
             if Ministerio.objects.filter(nombre__iexact=nombre_ministerio).exists():
                 return JsonResponse({'error': 'Ya existe un ministerio con este nombre'}, status=400)
 
-            # 4. Procesar formdata
+            # 4. Procesar la imagen si existe
+            imagen_path = request.FILES.get('imagen')  # O request.FILES.get('imagen_path') según cómo envíes el archivo
+            if imagen_path:
+                # Validar tamaño de imagen (máximo 5MB)
+                if imagen_path.size > 5 * 1024 * 1024:
+                    return JsonResponse({'error': 'La imagen es demasiado grande (máximo 5MB)'}, status=400)
+                
+                # Validar tipo de archivo
+                valid_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+                ext = os.path.splitext(imagen_path.name)[1].lower()
+                if ext not in valid_extensions:
+                    return JsonResponse({'error': 'Formato de imagen no válido. Use JPG, JPEG, PNG o WEBP'}, status=400)
+
+            # 5. Procesar otros datos del formulario
             descripcion = request.POST.get('descripcion')
             estado = request.POST.get('estado', 'Activo')
             persona_lider1_id = request.POST.get('id_persona_lider1')
             persona_lider2_id = request.POST.get('id_persona_lider2')
 
             with transaction.atomic():
-                # 5. Validar y convertir personas a líderes
+                # 6. Validar y convertir personas a líderes
                 lider1 = lider2 = None
                 usuarios_creados = {}
                 rol_lider = Rol.objects.filter(id_rol=2).first()
@@ -178,19 +203,30 @@ class CrearMinisterioView(View):
                     except ValueError as e:
                         return JsonResponse({'error': f'Líder 2 no válido: {str(e)}'}, status=400)
 
-                # 6. Crear ministerio
-                ministerio = Ministerio.objects.create(
+                # 7. Crear ministerio (incluyendo la imagen)
+                ministerio = Ministerio(
                     nombre=nombre_ministerio,
                     descripcion=descripcion,
                     estado=estado,
                     id_lider1=lider1,
                     id_lider2=lider2
                 )
+                
+                # Asignar la imagen si existe
+                if imagen_path:
+                    ministerio.imagen_path = imagen_path
+                
+                ministerio.save()
+
+                # Preparar URL de la imagen para la respuesta
+                imagen_url = ministerio.imagen_path.url if ministerio.imagen_path else None
 
                 response_data = {
                     'mensaje': 'Ministerio creado con éxito',
                     'id_ministerio': ministerio.id_ministerio,
                     'ministerio': nombre_ministerio,
+                    'imagen_url': imagen_url,
+                    'estado': estado
                 }
                 
                 if usuarios_creados:
@@ -227,11 +263,11 @@ class ListarMinisteriosView(View):
             except jwt.InvalidTokenError:
                 return JsonResponse({'error': 'Token inválido'}, status=401)
 
-            # 2. Obtener todos los ministerios con información de líderes, ordenados por id_ministerio ascendente
+            # 2. Obtener todos los ministerios con información de líderes
             ministerios = Ministerio.objects.select_related(
                 'id_lider1__id_persona', 
                 'id_lider2__id_persona'
-            ).all().order_by('id_ministerio')  # <- Aquí añades el order_by
+            ).all().order_by('id_ministerio')
 
             # 3. Preparar la respuesta
             ministerios_data = []
@@ -258,11 +294,17 @@ class ListarMinisteriosView(View):
                         'cedula': ministerio.id_lider2.id_persona.numero_cedula
                     }
 
+                # Obtener URL de la imagen si existe
+                imagen_url = None
+                if ministerio.imagen_path:
+                    imagen_url = request.build_absolute_uri(ministerio.imagen_path.url)
+
                 ministerios_data.append({
                     'id_ministerio': ministerio.id_ministerio,
                     'nombre': ministerio.nombre,
                     'descripcion': ministerio.descripcion,
                     'estado': ministerio.estado,
+                    'imagen_url': imagen_url,  # Añadimos la URL de la imagen
                     'lider1': lider1_data,
                     'lider2': lider2_data,
                 })
@@ -286,7 +328,7 @@ class EditarMinisterioView(View):
             try:
                 payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
                 rol_usuario = payload.get('rol')
-                id_usuario_actual = payload.get('id_usuario')  # Necesitamos el ID del usuario actual
+                id_usuario_actual = payload.get('id_usuario')
                 
                 rol_id = Rol.objects.filter(rol=rol_usuario).first()
                 if not rol_id or rol_id.id_rol not in [1, 2]:
@@ -309,15 +351,53 @@ class EditarMinisterioView(View):
             estado = request.POST.get('estado')
             nuevo_lider1_id = request.POST.get('id_persona_lider1')
             nuevo_lider2_id = request.POST.get('id_persona_lider2')
+            eliminar_imagen = request.POST.get('eliminar_imagen', 'false').lower() == 'true'
+            imagen = request.FILES.get('imagen')
+            
+            # Bandera para indicar si la imagen fue modificada
+            imagen_modificada = False
 
             with transaction.atomic():
-                # 4. Manejo de líderes actuales (para desactivar si son reemplazados)
+                # 4. Manejo de la imagen
+                if eliminar_imagen and ministerio.imagen_path:
+                    # Eliminar el archivo físico si existe
+                    if os.path.isfile(ministerio.imagen_path.path):
+                        try:
+                            os.remove(ministerio.imagen_path.path)
+                        except OSError as e:
+                            print(f"Error al eliminar imagen: {e}")
+                    
+                    ministerio.imagen_path = None
+                    imagen_modificada = True
+                
+                if imagen:
+                    # Validar tamaño de imagen (máximo 5MB)
+                    if imagen.size > 5 * 1024 * 1024:
+                        return JsonResponse({'error': 'La imagen es demasiado grande (máximo 5MB)'}, status=400)
+                    
+                    # Validar tipo de archivo
+                    valid_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+                    ext = os.path.splitext(imagen.name)[1].lower()
+                    if ext not in valid_extensions:
+                        return JsonResponse({'error': 'Formato de imagen no válido. Use JPG, JPEG, PNG o WEBP'}, status=400)
+                    
+                    # Eliminar la imagen anterior si existe
+                    if ministerio.imagen_path and os.path.isfile(ministerio.imagen_path.path):
+                        try:
+                            os.remove(ministerio.imagen_path.path)
+                        except OSError as e:
+                            print(f"Error al eliminar imagen anterior: {e}")
+                    
+                    ministerio.imagen_path = imagen
+                    imagen_modificada = True
+
+                # 5. Manejo de líderes actuales (para desactivar si son reemplazados)
                 lideres_originales = {
                     'lider1': ministerio.id_lider1,
                     'lider2': ministerio.id_lider2
                 }
                 
-                # 5. Función para manejar cambios de líderes
+                # 6. Función para manejar cambios de líderes
                 def procesar_lider(persona_id, lider_actual, usuario_actual=None):
                     if not persona_id:
                         return None
@@ -396,7 +476,7 @@ class EditarMinisterioView(View):
                     except Exception as e:
                         raise ValueError(str(e))
 
-                # 6. Procesar nuevos líderes
+                # 7. Procesar nuevos líderes
                 nuevos_lideres = {}
                 errores = {}
                 
@@ -423,12 +503,12 @@ class EditarMinisterioView(View):
                 if errores:
                     return JsonResponse({'error': 'Error en los líderes', 'detalles': errores}, status=400)
 
-                # 7. Validar que no sean la misma persona
+                # 8. Validar que no sean la misma persona
                 if (nuevos_lideres.get('lider1') and nuevos_lideres.get('lider2') and 
                     nuevos_lideres['lider1'].id_persona.id_persona == nuevos_lideres['lider2'].id_persona.id_persona):
                     return JsonResponse({'error': 'Una persona no puede ser ambos líderes'}, status=400)
 
-                # 8. Desactivar líderes anteriores si fueron reemplazados
+                # 9. Desactivar líderes anteriores si fueron reemplazados
                 for rol, lider_original in lideres_originales.items():
                     if lider_original and (rol in nuevos_lideres and nuevos_lideres[rol] != lider_original):
                         # Verificar si el líder original ya no es líder en otro ministerio
@@ -440,7 +520,7 @@ class EditarMinisterioView(View):
                             lider_original.activo = False
                             lider_original.save()
 
-                # 9. Actualizar ministerio
+                # 10. Actualizar ministerio
                 if nombre is not None and nombre != '':
                     # Verificar que el nuevo nombre no exista (excepto para este ministerio)
                     if Ministerio.objects.filter(nombre__iexact=nombre).exclude(id_ministerio=id_ministerio).exists():
@@ -461,17 +541,19 @@ class EditarMinisterioView(View):
                 
                 ministerio.save()
 
-                # 10. Preparar respuesta
+                # 11. Preparar respuesta
                 response_data = {
                     'mensaje': 'Ministerio actualizado con éxito',
                     'id_ministerio': ministerio.id_ministerio,
                     'ministerio': ministerio.nombre,
+                    'imagen_url': ministerio.imagen_path.url if ministerio.imagen_path else None,
                     'cambios': {
                         'nombre': nombre is not None,
                         'descripcion': descripcion is not None,
                         'estado': estado is not None,
                         'lider1': nuevo_lider1_id is not None,
-                        'lider2': nuevo_lider2_id is not None
+                        'lider2': nuevo_lider2_id is not None,
+                        'imagen': imagen_modificada
                     }
                 }
 

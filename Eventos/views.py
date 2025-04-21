@@ -6,7 +6,10 @@ from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
-from .models import Evento, MotivosEvento
+
+from Login.models import *
+from Ministerio.models import Ministerio
+from .models import Evento, MotivosEvento, Notificaciones
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CrearEventoView(View):
@@ -184,6 +187,15 @@ class CancelarEventoView(View):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
+def obtener_usuario_id(request):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        raise Exception('Token no proporcionado')
+    
+    token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else auth_header
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+    return payload.get('id_usuario')
+
 @method_decorator(csrf_exempt, name='dispatch')
 class AprobarRechazarEventoView(View):
     def post(self, request, id_evento, *args, **kwargs):
@@ -228,6 +240,31 @@ class AprobarRechazarEventoView(View):
                     evento = Evento.objects.get(id_evento=id_evento)
                 except Evento.DoesNotExist:
                     return JsonResponse({'error': 'Evento no encontrado'}, status=404)
+
+                # Verificar si es el creador del evento
+                es_creador = evento.id_usuario_id == usuario_id
+
+                # Lógica para cancelación por otro pastor
+                if accion == 'cancelar' and not es_creador:
+                    if evento.id_estado_id != 2:  # Solo si está aprobado
+                        return JsonResponse({
+                            'error': 'Acción no permitida',
+                            'detalle': 'Solo se pueden cancelar eventos aprobados'
+                        }, status=400)
+                    
+                    # Crear notificación de solicitud de cancelación
+                    Notificaciones.objects.create(
+                        id_evento=evento,
+                        id_usuario_remitente_id=usuario_id,
+                        id_usuario_destino=evento.id_usuario,
+                        tipo='solicitud_cancelacion',
+                        mensaje=f"Solicitud de cancelación del evento '{evento.nombre}'. Motivo: {motivo}"
+                    )
+                    
+                    return JsonResponse({
+                        'mensaje': 'Solicitud de cancelación enviada al creador del evento',
+                        'requiere_aprobacion': True
+                    })
 
                 # Mapeo de estados y validaciones
                 state_mapping = {
@@ -287,9 +324,146 @@ class AprobarRechazarEventoView(View):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
+@method_decorator(csrf_exempt, name='dispatch')
+class NotificacionesView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            usuario_id = obtener_usuario_id(request)
+            leida = request.GET.get('leida', None)
+            
+            queryset = Notificaciones.objects.filter(
+                id_usuario_destino_id=usuario_id
+            ).select_related(
+                'id_evento',
+                'id_evento__id_ministerio',
+                'id_usuario_remitente',
+                'id_usuario_remitente__id_persona'  # Nuevo: para obtener datos de la persona
+            )
+            
+            if leida is not None:
+                queryset = queryset.filter(leida=not bool(leida.lower() == 'true'))
+            
+            queryset = queryset.order_by('-fecha_creacion')
+            
+            data = []
+            for n in queryset:
+                evento_data = {
+                    'id_evento': n.id_evento_id,
+                    'nombre': n.id_evento.nombre if n.id_evento else None,
+                    'ministerio': n.id_evento.id_ministerio.nombre if n.id_evento and n.id_evento.id_ministerio else None
+                }
+                
+                # Datos del remitente
+                remitente_data = None
+                if n.id_usuario_remitente and n.id_usuario_remitente.id_persona:
+                    remitente_data = {
+                        'nombres': n.id_usuario_remitente.id_persona.nombres,
+                        'apellidos': n.id_usuario_remitente.id_persona.apellidos
+                    }
+                
+                data.append({
+                    'id_notificacion': n.id_notificacion,
+                    'evento': evento_data,
+                    'remitente': remitente_data,  # Nuevo campo
+                    'tipo': n.tipo,
+                    'mensaje': n.mensaje,
+                    'leida': n.leida,
+                    'accion_tomada': n.accion_tomada,
+                    'fecha_creacion': n.fecha_creacion.strftime('%Y-%m-%d %H:%M') if n.fecha_creacion else None
+                })
+            
+            return JsonResponse({'notificaciones': data})
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class MarcarNotificacionLeidaView(View):
+    def post(self, request, *args, **kwargs):
+        try:
+            usuario_id = obtener_usuario_id(request)
+            data = json.loads(request.body)
+            
+            notificacion = Notificaciones.objects.get(
+                id_notificacion=data.get('id_notificacion'),
+                id_usuario_destino_id=usuario_id
+            )
+            
+            notificacion.leida = True
+            notificacion.save()
+            
+            return JsonResponse({'mensaje': 'Notificación marcada como leída'})
+            
+        except Notificaciones.DoesNotExist:
+            return JsonResponse({'error': 'Notificación no encontrada'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
 
-
-
+@method_decorator(csrf_exempt, name='dispatch')
+class ResponderNotificacionView(View):
+    def post(self, request, *args, **kwargs):
+        try:
+            usuario_id = obtener_usuario_id(request)
+            data = json.loads(request.body)
+            
+            notificacion = Notificaciones.objects.get(
+                id_notificacion=data.get('id_notificacion'),
+                id_usuario_destino_id=usuario_id
+            )
+            
+            aprobada = data.get('aprobada')
+            motivo_rechazo = data.get('motivo_rechazo', '')
+            
+            if notificacion.tipo == 'solicitud_cancelacion' and notificacion.accion_tomada is None:
+                # Obtener datos del usuario que está respondiendo
+                usuario_actual = Usuario.objects.get(id_usuario=usuario_id)
+                persona_actual = Persona.objects.get(id_persona=usuario_actual.id_persona_id)
+                
+                # Obtener datos del evento
+                evento = Evento.objects.get(id_evento=notificacion.id_evento_id)
+                ministerio = Ministerio.objects.get(id_ministerio=evento.id_ministerio_id)
+                
+                if aprobada:
+                    # Lógica de aprobación
+                    evento.id_estado_id = 4  # Cancelado
+                    evento.save()
+                    
+                    MotivosEvento.objects.create(
+                        id_evento=evento,
+                        id_usuario_id=usuario_id,
+                        descripcion=f"Cancelación aprobada. Motivo original: {notificacion.mensaje}"
+                    )
+                else:
+                    # Lógica de rechazo con todos los detalles
+                    mensaje_rechazo = (
+                        f"Tu solicitud de cancelación del evento '{evento.nombre}' "
+                        f"(Ministerio: {ministerio.nombre}) fue rechazada por "
+                        f"{persona_actual.nombres} {persona_actual.apellidos}. "
+                        f"Motivo: {motivo_rechazo}"
+                    )
+                    
+                    Notificaciones.objects.create(
+                        id_evento=notificacion.id_evento,
+                        id_usuario_remitente_id=usuario_id,
+                        id_usuario_destino=notificacion.id_usuario_remitente,
+                        tipo='respuesta_rechazo',
+                        mensaje=mensaje_rechazo,
+                        motivo_rechazo=motivo_rechazo
+                    )
+                
+                notificacion.accion_tomada = aprobada
+                notificacion.leida = True
+                notificacion.save()
+                
+                return JsonResponse({
+                    'mensaje': 'Respuesta registrada exitosamente',
+                    'evento_actualizado': aprobada
+                })
+            
+            return JsonResponse({'error': 'Notificación ya procesada'}, status=400)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
 
 
 

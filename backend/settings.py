@@ -163,4 +163,9 @@ CORS_ALLOWED_ORIGINS = [
 # Si necesitas permitir credenciales (cookies, auth headers)
 CORS_ALLOW_CREDENTIALS = True
 
-# Configuración de JWT (si necesitas expiración)
+# Configuración para archivos multimedia
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+# Tamaño máximo de archivos subidos (opcional)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB

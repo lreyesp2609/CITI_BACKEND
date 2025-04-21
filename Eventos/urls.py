@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import *
+from . import views
 
 urlpatterns = [
     path('crear/', CrearEventoView.as_view(), name='crear_evento'),  
@@ -10,4 +11,7 @@ urlpatterns = [
     path('detalle_eventos/<int:id_evento>/', ObtenerEventoView.as_view(), name='obtener_evento'),
     path('mis_eventos/', ListarMisEventosView.as_view(), name='listar_mis_eventos'),
     path('evetos_usuarios/', ListarEventosOtrosUsuariosView.as_view(), name='listar_eventos_otros_usuarios'),
+    path('notificaciones/', NotificacionesView.as_view(), name='notificaciones'),
+    path('notificaciones/respuesta/', ResponderNotificacionView.as_view(), name='responder_notificacion'),
+    path('notificaciones/marcar_leida/', views.MarcarNotificacionLeidaView.as_view(), name='marcar_notificacion_leida'),
 ]
