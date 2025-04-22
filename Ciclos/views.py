@@ -145,9 +145,11 @@ class VerCicloView(View):
                 return JsonResponse({'error': 'Ciclo no encontrado'}, status=404)
 
             return JsonResponse({
-                'id_ciclo': ciclo.id_ciclo,
-                'nombre': ciclo.nombre,
-                'descripcion': ciclo.descripcion
+                'data': {
+                    'id_ciclo': ciclo.id_ciclo,
+                    'nombre': ciclo.nombre,
+                    'descripcion': ciclo.descripcion
+                }
             }, status=200)
 
         except Exception as e:

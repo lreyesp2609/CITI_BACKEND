@@ -238,7 +238,30 @@ class RegistrarParticipantesCursoView(View):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-        
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarParticipantesCursoView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            id_curso = kwargs.get('id_curso')
+            participantes = CursoParticipante.objects.filter(id_curso=id_curso).select_related('id_persona')
+            
+            if not participantes.exists():
+                return JsonResponse([], safe=False, status=200)
+
+            data = []
+            for participante in participantes:
+                data.append({
+                    'id_persona': participante.id_persona.id_persona,
+                    'nombre': participante.id_persona.nombres,
+                    'apellido': participante.id_persona.apellidos,
+                })
+
+            return JsonResponse(data, safe=False, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
 @method_decorator(csrf_exempt, name='dispatch')
 class RegistrarAsistenciaCursoView(View):
     def post(self, request, *args, **kwargs):
