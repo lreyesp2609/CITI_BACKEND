@@ -563,7 +563,13 @@ class ObtenerEventoView(View):
                 return JsonResponse({'error': 'Token inválido'}, status=401)
 
             try:
-                evento = Evento.objects.get(id_evento=id_evento)
+                evento = Evento.objects.select_related(
+                    'id_estado', 
+                    'id_ministerio', 
+                    'id_usuario', 
+                    'id_usuario__id_persona',
+                    'id_tipo_evento'
+                ).get(id_evento=id_evento)
             except Evento.DoesNotExist:
                 return JsonResponse({'error': 'Evento no encontrado'}, status=404)
 
@@ -571,13 +577,21 @@ class ObtenerEventoView(View):
                 'id_evento': evento.id_evento,
                 'nombre': evento.nombre,
                 'descripcion': evento.descripcion,
-                'fecha': evento.fecha,
-                'hora': evento.hora,
+                'fecha': evento.fecha.strftime('%Y-%m-%d') if evento.fecha else None,
+                'hora': evento.hora.strftime('%H:%M:%S') if evento.hora else None,
                 'lugar': evento.lugar,
-                'estado': evento.id_estado.nombre,
-                'id_ministerio': evento.id_ministerio.id_ministerio,
-                'ministerio': evento.id_ministerio.nombre,
-                'usuario': f"{evento.id_usuario.id_persona.nombres} {evento.id_usuario.id_persona.apellidos}"
+                'estado': evento.id_estado.nombre if evento.id_estado else None,
+                'id_estado': evento.id_estado.id_estado if evento.id_estado else None,
+                'id_ministerio': evento.id_ministerio.id_ministerio if evento.id_ministerio else None,
+                'ministerio': evento.id_ministerio.nombre if evento.id_ministerio else None,
+                'usuario': f"{evento.id_usuario.id_persona.nombres} {evento.id_usuario.id_persona.apellidos}",
+                'id_usuario': evento.id_usuario.id_usuario,
+                'tipo_evento': {
+                    'id': evento.id_tipo_evento.id_tipo_evento if evento.id_tipo_evento else None,
+                    'nombre': evento.id_tipo_evento.nombre if evento.id_tipo_evento else None,
+                    'descripcion': evento.id_tipo_evento.descripcion if evento.id_tipo_evento else None,
+                    'activo': evento.id_tipo_evento.activo if evento.id_tipo_evento else None
+                }
             }
 
             return JsonResponse({'evento': data}, status=200)
@@ -683,6 +697,60 @@ class ListarEventosOtrosUsuariosView(View):
                 'eventos': eventos_data,
                 'total': len(eventos_data),
                 'mensaje': 'Eventos de otros usuarios obtenidos correctamente'
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarTodosEventosView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            auth_header = request.headers.get('Authorization')
+            if auth_header:  # Si hay token, validarlo pero no es requerido para todos los casos
+                token = auth_header.split('Bearer ')[1] if 'Bearer ' in auth_header else auth_header
+                try:
+                    jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                except jwt.ExpiredSignatureError:
+                    return JsonResponse({'error': 'Token expirado'}, status=401)
+                except jwt.InvalidTokenError:
+                    return JsonResponse({'error': 'Token inválido'}, status=401)
+
+            # Obtener todos los eventos con select_related para optimizar
+            eventos = Evento.objects.all()\
+                                   .select_related('id_estado', 'id_ministerio', 'id_usuario', 'id_usuario__id_persona', 'id_tipo_evento')\
+                                   .order_by('-fecha', '-hora')  # Ordenados por fecha y hora descendente
+
+            eventos_data = [
+                {
+                    'id_evento': e.id_evento,
+                    'nombre': e.nombre,
+                    'descripcion': e.descripcion,
+                    'fecha': e.fecha.strftime('%Y-%m-%d') if e.fecha else None,
+                    'hora': e.hora.strftime('%H:%M:%S') if e.hora else None,
+                    'lugar': e.lugar,
+                    'estado': e.id_estado.nombre if e.id_estado else None,
+                    'id_estado': e.id_estado.id_estado if e.id_estado else None,
+                    'id_ministerio': e.id_ministerio.id_ministerio if e.id_ministerio else None,
+                    'ministerio': e.id_ministerio.nombre if e.id_ministerio else None,
+                    'usuario': f"{e.id_usuario.id_persona.nombres} {e.id_usuario.id_persona.apellidos}" if e.id_usuario and e.id_usuario.id_persona else None,
+                    'id_usuario': e.id_usuario.id_usuario if e.id_usuario else None,
+                    'id_tipo_evento': e.id_tipo_evento.id_tipo_evento if e.id_tipo_evento else None,
+                    'tipo_evento': {
+                        'id': e.id_tipo_evento.id_tipo_evento if e.id_tipo_evento else None,
+                        'nombre': e.id_tipo_evento.nombre if e.id_tipo_evento else None,
+                        'descripcion': e.id_tipo_evento.descripcion if e.id_tipo_evento else None,
+                        'activo': e.id_tipo_evento.activo if e.id_tipo_evento else None
+                    },
+                    'es_mio': e.id_usuario.id_usuario == request.user.id if auth_header and hasattr(request, 'user') else None
+                }
+                for e in eventos
+            ]
+
+            return JsonResponse({
+                'eventos': eventos_data,
+                'total': len(eventos_data),
+                'mensaje': 'Todos los eventos obtenidos correctamente'
             }, status=200)
 
         except Exception as e:
