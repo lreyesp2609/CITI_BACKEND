@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'Roles',
     'Ciclos',
     'Cursos',
+    'Devocionales',
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',

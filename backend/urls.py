@@ -29,4 +29,6 @@ urlpatterns = [
     path('Roles/', include('Roles.urls')),
     path('Ciclos/', include('Ciclos.urls')),
     path('Cursos/', include('Cursos.urls')),
+    path('Devocionales/', include('Devocionales.urls')),
+
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

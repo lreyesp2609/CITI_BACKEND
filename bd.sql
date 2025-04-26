@@ -195,3 +195,18 @@ CREATE TABLE calificacion (
     FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE, 
     FOREIGN KEY (id_criterio) REFERENCES rubrica(id_rubrica) ON DELETE CASCADE
 );
+
+CREATE TABLE devocionales (
+    id_devocional SERIAL PRIMARY KEY,
+    id_usuario INTEGER REFERENCES usuarios(id_usuario),
+    mes VARCHAR(20) NOT NULL,
+    año INTEGER NOT NULL,
+    fecha DATE NOT NULL DEFAULT CURRENT_DATE,
+    titulo TEXT NOT NULL,
+    texto_biblico TEXT NOT NULL,
+    reflexion TEXT NOT NULL,
+    contenido_calendario JSONB,
+    fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT devocionales_mes_año_unique UNIQUE (mes, año)
+);

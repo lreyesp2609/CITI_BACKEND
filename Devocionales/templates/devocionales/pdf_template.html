@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Devocional {{ mes }} {{ año }}</title>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 10px;
+            line-height: 1.4;
+        }
+
+        .contenido-principal {
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 2cm);
+        }
+
+        .encabezado-calendario {
+            text-align: center;
+            margin-bottom: 5px;
+            flex-shrink: 0;
+        }
+
+        .mes-año {
+            color: #2c3e50;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .calendario-container {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .calendario-mes {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            flex-grow: 1;
+        }
+
+        .calendario-mes th {
+            background-color: #000;
+            color: white;
+            text-align: center;
+            padding: 6px;
+            font-weight: bold;
+            height: 30px;
+            font-size: 11px;
+        }
+
+        .calendario-mes td {
+            border: 1px solid #ddd;
+            padding: 5px;
+            height: 1.5cm;
+            vertical-align: top;
+            text-align: center;
+            font-size: 11px;
+            position: relative;
+        }
+
+        .dia-numero {
+            font-weight: bold;
+            margin-bottom: 2px;
+            font-size: 10px;
+        }
+
+        .evento-calendario {
+            white-space: normal;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 95%;
+            text-align: center;
+            padding: 2px;
+            margin: 1px auto;
+            background-color: rgba(23, 120, 220, 0.1);
+            border-radius: 0.25rem;
+            font-size: 9px;
+            border: none;
+            color: #333;
+            display: inline-block;
+            line-height: 1.2;
+        }
+
+        .titulo-seccion {
+            text-align: center;
+            margin: 10px 0 5px 0;
+            flex-shrink: 0;
+        }
+
+        .titulo {
+            color: #2c3e50;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .texto-biblico-container {
+            text-align: center;
+            margin: 5px 0;
+            flex-shrink: 0;
+        }
+
+        .texto-biblico {
+            font-style: italic;
+            color: #2c3e50;
+            background-color: #f9f9f9;
+            padding: 8px;
+            border-left: 3px solid #3498db;
+            display: inline-block;
+            text-align: center;
+            max-width: 90%;
+            margin: 0 auto;
+            font-size: 11px;
+        }
+
+        .footer {
+            margin-top: 10px;
+            text-align: center;
+            font-size: 10px;
+            color: #7f8c8d;
+            flex-shrink: 0;
+        }
+
+        .dia-no-mes {
+            background-color: #f9f9f9;
+            color: #aaa;
+        }
+
+        .dia-hoy {
+            background-color: #e6f7ff;
+        }
+
+        .contenido-adicional {
+            text-align: center;
+            margin-top: 5px;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="contenido-principal">
+        <!-- Solo Mes - Año arriba del calendario -->
+        <div class="encabezado-calendario">
+            <div class="mes-año">{{ mes }} {{ año }}</div>
+        </div>
+
+        <div class="calendario-container">
+            <table class="calendario-mes">
+                <thead>
+                    <tr>
+                        <th>Dom</th>
+                        <th>Lun</th>
+                        <th>Mar</th>
+                        <th>Mié</th>
+                        <th>Jue</th>
+                        <th>Vie</th>
+                        <th>Sáb</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for semana in semanas %}
+                    <tr>
+                        {% for dia in semana %}
+                        <td
+                            class="{% if not dia.es_mes_actual %}dia-no-mes{% endif %} {% if dia.es_hoy %}dia-hoy{% endif %}">
+                            {% if dia.numero %}
+                            <div class="dia-numero">{{ dia.numero }}</div>
+                            {% if dia.contenido %}
+                            <div class="evento-calendario">
+                                {{ dia.contenido|safe }}
+                            </div>
+                            {% endif %}
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Título debajo del calendario -->
+        <div class="titulo-seccion">
+            <div class="titulo">{{ devocional.titulo|default:"Devocional Mensual" }}</div>
+        </div>
+
+        {% if devocional.texto_biblico %}
+        <div class="texto-biblico-container">
+            <div class="texto-biblico">{{ devocional.texto_biblico }}</div>
+        </div>
+        {% endif %}
+
+        {% if devocional.reflexion %}
+        <div class="contenido-adicional">
+            {{ devocional.reflexion }}
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <div>Creado por: {{ devocional.id_usuario.usuario|default:"Sistema" }}</div>
+            <div>Generado el: {% now "d/m/Y H:i" %}</div>
+        </div>
+    </div>
+</body>
+
+</html>
