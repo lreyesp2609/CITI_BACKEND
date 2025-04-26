@@ -146,6 +146,7 @@ from weasyprint import HTML, CSS
 from django.views import View
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+import os
 
 # Diccionario de meses en español
 MESES_ESPANOL = {
@@ -203,13 +204,17 @@ class GenerarPDFDevocional(View):
                         }
                     semana.append(dia_info)
                 semanas.append(semana)
+
+            # Obtener ruta absoluta del logo
+            logo_path = os.path.abspath(os.path.join(settings.BASE_DIR, 'static', 'img', 'Logo.webp'))
             
             # Renderizar PDF
             html_string = render_to_string('devocionales/pdf_template.html', {
-                'devocional': devocional,
-                'mes': MESES_ESPANOL.get(month_num, devocional.mes),
-                'año': devocional.año,
-                'semanas': semanas
+            'devocional': devocional,
+            'mes': MESES_ESPANOL.get(month_num, devocional.mes),
+            'año': devocional.año,
+            'semanas': semanas,
+            'logo_path': 'file:///' + logo_path.replace('\\', '/')  # Ruta en formato file://
             })
             
             html = HTML(string=html_string)
