@@ -12,6 +12,7 @@ urlpatterns = [
     path('mis_eventos/', ListarMisEventosView.as_view(), name='listar_mis_eventos'),
     path('evetos_usuarios/', ListarEventosOtrosUsuariosView.as_view(), name='listar_eventos_otros_usuarios'),
     path('eventos_todos/', ListarTodosEventosView.as_view(), name='todos_eventos'),
+    path('eventos_ministerio/<int:ministerio_id>/', EventosPorMinisterioView.as_view(), name='eventos_por_ministerio'),
     path('notificaciones/', NotificacionesView.as_view(), name='notificaciones'),
     path('notificaciones/respuesta/', ResponderNotificacionView.as_view(), name='responder_notificacion'),
     path('notificaciones/marcar_leida/', views.MarcarNotificacionLeidaView.as_view(), name='marcar_notificacion_leida'),

@@ -915,3 +915,78 @@ class ListarTiposEventoView(View):
             return JsonResponse({'error': 'Usuario no encontrado'}, status=404)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class EventosPorMinisterioView(View):
+    def get(self, request, ministerio_id):
+        try:
+            # 1. Validación del token
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            token = auth_header.split('Bearer ')[1] if 'Bearer ' in auth_header else auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+
+            # 2. Verificar que el ministerio existe
+            try:
+                ministerio = Ministerio.objects.get(id_ministerio=ministerio_id)
+            except Ministerio.DoesNotExist:
+                return JsonResponse({'error': 'Ministerio no encontrado'}, status=404)
+
+            # 3. Obtener eventos APROBADOS del ministerio
+            eventos = Evento.objects.filter(
+                id_ministerio=ministerio_id,
+                id_estado__nombre='Aprobado'  # Filtro por estado Aprobado
+            ).select_related(
+                'id_estado',
+                'id_tipo_evento',
+                'id_usuario'
+            ).order_by('-fecha', '-hora')
+
+            total_eventos = eventos.count()
+            
+            # 4. Preparar la respuesta
+            eventos_data = []
+            for evento in eventos:
+                eventos_data.append({
+                    'id_evento': evento.id_evento,
+                    'nombre': evento.nombre,
+                    'descripcion': evento.descripcion,
+                    'fecha': evento.fecha.strftime('%Y-%m-%d'),
+                    'hora': evento.hora.strftime('%H:%M:%S'),
+                    'lugar': evento.lugar,
+                    'estado': {
+                        'id_estado': evento.id_estado.id_estado,
+                        'nombre': evento.id_estado.nombre
+                    },
+                    'tipo_evento': {
+                        'id_tipo_evento': evento.id_tipo_evento.id_tipo_evento if evento.id_tipo_evento else None,
+                        'nombre': evento.id_tipo_evento.nombre if evento.id_tipo_evento else None
+                    },
+                    'creador': {
+                        'id_usuario': evento.id_usuario.id_usuario,
+                        'nombres': evento.id_usuario.id_persona.nombres,
+                        'apellidos': evento.id_usuario.id_persona.apellidos
+                    },
+                    'fecha_creacion': evento.fecha_creacion.strftime('%Y-%m-%d %H:%M:%S')
+                })
+
+            return JsonResponse({
+                'ministerio': {
+                    'id_ministerio': ministerio.id_ministerio,
+                    'nombre': ministerio.nombre
+                },
+                'eventos': eventos_data,
+                'total_eventos': total_eventos 
+            }, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)

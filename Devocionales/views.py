@@ -9,6 +9,11 @@ import json
 from datetime import datetime
 from Devocionales.models import Devocionales
 from django.utils import timezone
+from django.db import transaction
+
+from Eventos.models import Evento
+from Ministerio.models import Ministerio
+from rest_framework import status
 
 def verificar_rol_admin(usuario_id):
     # Asume que tu modelo Usuarios tiene relación con Rol
@@ -29,35 +34,42 @@ def obtener_usuario_id(request):
 class DevocionalesView(View):
     def post(self, request, *args, **kwargs):
         try:
-            usuario_id = obtener_usuario_id(request)
-            
-            if not verificar_rol_admin(usuario_id):
-                return JsonResponse({'error': 'No autorizado'}, status=403)
-            
-            data = json.loads(request.body)
-            
-            # Crear o actualizar devocional mensual
-            devocional, created = Devocionales.objects.update_or_create(
-                mes=data['mes'],
-                año=data['año'],
-                defaults={
-                    'id_usuario_id': usuario_id,
-                    'fecha': timezone.now().date(),
-                    'titulo': data.get('titulo', ''),
-                    'texto_biblico': data.get('texto_biblico', ''),
-                    'reflexion': data.get('reflexion', ''),
-                    'contenido_calendario': data.get('contenido_calendario', {}),  # Corregido aquí
-                    'fecha_actualizacion': timezone.now()
-                }
-            )
-            
-            return JsonResponse({
-                'status': 'success',
-                'created': created,
-                'id_devocional': devocional.id_devocional
-            })
-            
+            # Iniciamos una transacción atómica
+            with transaction.atomic():
+                usuario_id = obtener_usuario_id(request)
+                
+                if not verificar_rol_admin(usuario_id):
+                    return JsonResponse({'error': 'No autorizado'}, status=403)
+                
+                data = json.loads(request.body)
+                
+                # Crear o actualizar devocional mensual
+                devocional, created = Devocionales.objects.update_or_create(
+                    mes=data['mes'],
+                    año=data['año'],
+                    defaults={
+                        'id_usuario_id': usuario_id,
+                        'fecha': timezone.now().date(),
+                        'titulo': data.get('titulo', ''),
+                        'texto_biblico': data.get('texto_biblico', ''),
+                        'reflexion': data.get('reflexion', ''),
+                        'contenido_calendario': data.get('contenido_calendario', {}),
+                        'fecha_actualizacion': timezone.now()
+                    }
+                )
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'created': created,
+                    'id_devocional': devocional.id_devocional
+                })
+                
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Formato JSON inválido'}, status=400)
+        except KeyError as e:
+            return JsonResponse({'error': f'Falta campo requerido: {str(e)}'}, status=400)
         except Exception as e:
+            # En caso de cualquier excepción, la transacción se revierte automáticamente
             return JsonResponse({'error': str(e)}, status=500)
 
 from django.http import JsonResponse

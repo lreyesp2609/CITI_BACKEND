@@ -562,3 +562,90 @@ class EditarMinisterioView(View):
         except Exception as e:
             error_trace = traceback.format_exc()
             return JsonResponse({'error': str(e), 'detalle': error_trace}, status=500)
+        
+def obtener_usuario_id(request):
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        raise Exception('Token no proporcionado')
+    
+    token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else auth_header
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+    return payload.get('id_usuario')
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarMinisteriosUsuarioView(View):
+    def get(self, request, usuario_id, *args, **kwargs):
+        try:
+            # 1. Validación del token
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            token = auth_header.split('Bearer ')[1] if 'Bearer ' in auth_header else auth_header
+
+            try:
+                payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+                rol_usuario = payload.get('rol')
+                
+                # Verificar permisos (puedes ajustar los roles permitidos)
+                rol_id = Rol.objects.filter(rol=rol_usuario).first()
+                if not rol_id:
+                    return JsonResponse({'error': 'Rol no válido'}, status=403)
+                    
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+
+            # 2. Obtener todos los ministerios del usuario (como líder1 o líder2)
+            ministerios = Ministerio.objects.select_related(
+                'id_lider1__id_persona', 
+                'id_lider2__id_persona'
+            ).filter(
+                Q(id_lider1=usuario_id) | Q(id_lider2=usuario_id)
+            ).order_by('id_ministerio')
+
+            # 3. Preparar la respuesta
+            ministerios_data = []
+            for ministerio in ministerios:
+                # Información del primer líder
+                lider1_data = None
+                if ministerio.id_lider1:
+                    lider1_data = {
+                        'id_persona': ministerio.id_lider1.id_persona.id_persona,
+                        'id_usuario': ministerio.id_lider1.id_usuario,
+                        'nombres': ministerio.id_lider1.id_persona.nombres,
+                        'apellidos': ministerio.id_lider1.id_persona.apellidos,
+                        'cedula': ministerio.id_lider1.id_persona.numero_cedula
+                    }
+
+                # Información del segundo líder
+                lider2_data = None
+                if ministerio.id_lider2:
+                    lider2_data = {
+                        'id_persona': ministerio.id_lider2.id_persona.id_persona,
+                        'id_usuario': ministerio.id_lider2.id_usuario,
+                        'nombres': ministerio.id_lider2.id_persona.nombres,
+                        'apellidos': ministerio.id_lider2.id_persona.apellidos,
+                        'cedula': ministerio.id_lider2.id_persona.numero_cedula
+                    }
+
+                # Obtener URL de la imagen si existe
+                imagen_url = None
+                if ministerio.imagen_path:
+                    imagen_url = request.build_absolute_uri(ministerio.imagen_path.url)
+
+                ministerios_data.append({
+                    'id_ministerio': ministerio.id_ministerio,
+                    'nombre': ministerio.nombre,
+                    'descripcion': ministerio.descripcion,
+                    'estado': ministerio.estado,
+                    'imagen_url': imagen_url,
+                    'lider1': lider1_data,
+                    'lider2': lider2_data,
+                })
+
+            return JsonResponse({'ministerios': ministerios_data}, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
