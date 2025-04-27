@@ -53,10 +53,11 @@ class DevocionalesView(View):
                         'titulo': data.get('titulo', ''),
                         'texto_biblico': data.get('texto_biblico', ''),
                         'reflexion': data.get('reflexion', ''),
-                        'contenido_calendario': data.get('contenido_calendario', {}),
+                        'contenido_calendario': json.dumps(data.get('contenido_calendario', {})),
                         'fecha_actualizacion': timezone.now()
                     }
                 )
+
                 
                 return JsonResponse({
                     'status': 'success',
@@ -170,37 +171,43 @@ MESES_ESPANOL = {
 @method_decorator(csrf_exempt, name='dispatch')
 class GenerarPDFDevocional(View):
     def get(self, request, id_devocional):
+
         devocional = get_object_or_404(Devocionales, pk=id_devocional)
-        
+
         # Diccionario inverso para obtener el número del mes
         meses_numero = {v.lower(): k for k, v in MESES_ESPANOL.items()}
-        
+
         try:
+            # Obtener número de mes y año
             month_num = meses_numero[devocional.mes.lower()]
             year_num = devocional.año
-            
+
             # Obtener calendario del mes
             cal = calendar.monthcalendar(year_num, month_num)
             semanas = []
-            hoy = datetime.now().day
-            
+            hoy = datetime.now()
+
             # Procesar contenido del calendario
             contenido = {}
-            for fecha_str, contenido_html in (devocional.contenido_calendario or {}).items():
+            if devocional.contenido_calendario:
                 try:
-                    # Convertir fecha de string a datetime
-                    fecha = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
-                    if fecha.month == month_num and fecha.year == year_num:
-                        # Almacenar por día del mes (1-31)
-                        contenido[fecha.day] = contenido_html
-                except (ValueError, TypeError):
-                    continue
-            
+                    contenido_json = json.loads(devocional.contenido_calendario)
+                except json.JSONDecodeError:
+                    contenido_json = {}
+
+                for fecha_str, contenido_html in contenido_json.items():
+                    try:
+                        fecha = datetime.strptime(fecha_str[:10], "%Y-%m-%d")
+                        if fecha.month == month_num and fecha.year == year_num:
+                            contenido[fecha.day] = contenido_html
+                    except (ValueError, TypeError):
+                        continue
+
             # Generar estructura de semanas
             for week in cal:
                 semana = []
                 for day in week:
-                    if day == 0:  # Días que no pertenecen al mes
+                    if day == 0:
                         dia_info = {
                             'numero': '',
                             'es_mes_actual': False,
@@ -211,7 +218,7 @@ class GenerarPDFDevocional(View):
                         dia_info = {
                             'numero': day,
                             'es_mes_actual': True,
-                            'es_hoy': (day == hoy and datetime.now().month == month_num),
+                            'es_hoy': (day == hoy.day and hoy.month == month_num and hoy.year == year_num),
                             'contenido': contenido.get(day, '')
                         }
                     semana.append(dia_info)
@@ -219,19 +226,19 @@ class GenerarPDFDevocional(View):
 
             # Obtener ruta absoluta del logo
             logo_path = os.path.abspath(os.path.join(settings.BASE_DIR, 'static', 'img', 'Logo.webp'))
-            
+
             # Renderizar PDF
             html_string = render_to_string('devocionales/pdf_template.html', {
-            'devocional': devocional,
-            'mes': MESES_ESPANOL.get(month_num, devocional.mes),
-            'año': devocional.año,
-            'semanas': semanas,
-            'logo_path': 'file:///' + logo_path.replace('\\', '/')  # Ruta en formato file://
+                'devocional': devocional,
+                'mes': MESES_ESPANOL.get(month_num, devocional.mes),
+                'año': devocional.año,
+                'semanas': semanas,
+                'logo_path': 'file:///' + logo_path.replace('\\', '/')
             })
-            
+
             html = HTML(string=html_string)
-            
-            # CSS optimizado para una sola página
+
+            # CSS
             css_string = '''
                 @page {
                     size: A4 landscape;
@@ -251,14 +258,14 @@ class GenerarPDFDevocional(View):
                     flex-direction: column;
                 }
             '''
-            
+
             css = CSS(string=css_string)
             result = html.write_pdf(stylesheets=[css], presentational_hints=True)
-            
+
             response = HttpResponse(content_type='application/pdf')
             response['Content-Disposition'] = f'attachment; filename="devocional_{devocional.mes}_{devocional.año}.pdf"'
             response.write(result)
             return response
-            
+
         except KeyError:
             return HttpResponse("Nombre de mes no válido", status=400)

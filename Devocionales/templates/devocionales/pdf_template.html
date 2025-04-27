@@ -170,7 +170,7 @@
 
         <!-- Título del devocional -->
         <div class="titulo-seccion">
-            <div class="titulo">{{ devocional.titulo|default:"Devocional Mensual" }}</div>
+            <div class="titulo">{{ devocional.titulo|default:"Devocional Mensual"|safe }}</div>
         </div>
 
         <!-- Texto bíblico -->

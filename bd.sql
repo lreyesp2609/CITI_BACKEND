@@ -1,9 +1,11 @@
+-- Tabla de roles de usuario
 CREATE TABLE rol (
     id_rol SERIAL PRIMARY KEY,
     rol VARCHAR(50) NOT NULL,
     descripcion VARCHAR(255)
 );
 
+-- Tabla de personas
 CREATE TABLE personas (
     id_persona SERIAL PRIMARY KEY,
     numero_cedula VARCHAR(20) NULL UNIQUE,
@@ -22,6 +24,7 @@ CREATE TABLE personas (
     lugar_trabajo VARCHAR(50) NULL
 );
 
+-- Tabla de usuarios (necesita rol y personas)
 CREATE TABLE usuarios (
     id_usuario SERIAL PRIMARY KEY,
     id_rol INT NOT NULL,
@@ -33,6 +36,7 @@ CREATE TABLE usuarios (
     FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE
 );
 
+-- Ministerio (necesita usuarios para líderes)
 CREATE TABLE ministerio (
     id_ministerio SERIAL PRIMARY KEY,
     nombre VARCHAR(255) NOT NULL,
@@ -43,14 +47,22 @@ CREATE TABLE ministerio (
     id_lider2 INT REFERENCES usuarios(id_usuario) ON DELETE SET NULL
 );
 
--- Tabla de estados para eventos
+-- Tipos de evento (antes que eventos)
+CREATE TABLE tipo_evento (
+    id_tipo_evento SERIAL PRIMARY KEY,
+    nombre VARCHAR(100) NOT NULL,
+    descripcion VARCHAR(255),
+    activo BOOLEAN DEFAULT TRUE
+);
+
+-- Estado de eventos
 CREATE TABLE estado_evento (
     id_estado SERIAL PRIMARY KEY,
     nombre VARCHAR(50) NOT NULL,
     descripcion VARCHAR(255)
 );
 
--- Tabla principal de eventos
+-- Eventos
 CREATE TABLE eventos (
     id_evento SERIAL PRIMARY KEY,
     nombre VARCHAR(255) NOT NULL,
@@ -59,8 +71,9 @@ CREATE TABLE eventos (
     fecha DATE NOT NULL,
     hora TIME NOT NULL,
     lugar VARCHAR(255),
-    id_usuario INT NOT NULL, -- Que crea el evento
-    id_estado INT NOT NULL DEFAULT 1, -- Por defecto Pendiente
+    id_usuario INT NOT NULL, -- creador
+    id_estado INT NOT NULL DEFAULT 1,
+    id_tipo_evento INT,
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_actualizacion TIMESTAMP,
     FOREIGN KEY (id_ministerio) REFERENCES ministerio(id_ministerio) ON DELETE CASCADE,
@@ -69,30 +82,31 @@ CREATE TABLE eventos (
     FOREIGN KEY (id_tipo_evento) REFERENCES tipo_evento(id_tipo_evento) ON DELETE SET NULL
 );
 
--- Tabla de motivos para eventos (aprobaciones/rechazos)
+-- Motivos de aprobación/rechazo de eventos
 CREATE TABLE motivos_evento (
     id_motivo SERIAL PRIMARY KEY,
     id_evento INT NOT NULL,
-    id_usuario INT NOT NULL, -- Usuario que aprueba/rechaza
-    descripcion TEXT NOT NULL, -- Motivo de aprobación/rechazo
+    id_usuario INT NOT NULL,
+    descripcion TEXT NOT NULL,
     fecha DATE NOT NULL DEFAULT CURRENT_DATE,
     hora TIME NOT NULL DEFAULT CURRENT_TIME,
     FOREIGN KEY (id_evento) REFERENCES eventos(id_evento) ON DELETE CASCADE,
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE
 );
 
--- Tabla para registro de participantes en eventos
+-- Participantes de eventos
 CREATE TABLE participantes_evento (
     id_participacion SERIAL PRIMARY KEY,
     id_evento INT NOT NULL,
     id_usuario INT NOT NULL,
     fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    asistencia BOOLEAN DEFAULT NULL, -- NULL=no confirmado, TRUE=asistió, FALSE=no asistió
+    asistencia BOOLEAN DEFAULT NULL,
     FOREIGN KEY (id_evento) REFERENCES eventos(id_evento) ON DELETE CASCADE,
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE,
-    UNIQUE (id_evento, id_usuario) -- Un usuario solo puede registrarse una vez por evento
+    UNIQUE (id_evento, id_usuario)
 );
 
+-- Notificaciones
 CREATE TABLE notificaciones (
     id_notificacion SERIAL PRIMARY KEY,
     id_evento INTEGER REFERENCES eventos(id_evento) ON DELETE CASCADE,
@@ -102,24 +116,18 @@ CREATE TABLE notificaciones (
     mensaje TEXT NOT NULL,
     leida BOOLEAN DEFAULT FALSE,
     fecha_creacion TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    accion_tomada BOOLEAN -- TRUE=aprobada, FALSE=rechazada, NULL=pendiente
+    accion_tomada BOOLEAN, -- TRUE=aprobada, FALSE=rechazada, NULL=pendiente
+    motivo_rechazo TEXT
 );
 
-CREATE TABLE tipo_evento (
-    id_tipo_evento SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    descripcion VARCHAR(255),
-    activo BOOLEAN DEFAULT TRUE
-);
-
--- Ciclos (Ej: Semestre 1-2025)
+-- Tabla de ciclos
 CREATE TABLE ciclo (
     id_ciclo SERIAL PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     descripcion TEXT
 );
 
--- Cursos
+-- Cursos (necesita ciclo y usuario)
 CREATE TABLE curso (
     id_curso SERIAL PRIMARY KEY,
     nombre VARCHAR(255) NOT NULL,
@@ -133,18 +141,18 @@ CREATE TABLE curso (
     FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario) ON DELETE CASCADE
 );
 
--- Participantes inscritos a un curso
+-- Participantes de cursos
 CREATE TABLE curso_participante (
     id_participante SERIAL PRIMARY KEY,
     id_curso INT NOT NULL,
     id_persona INT NOT NULL,
     fecha_inscripcion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE,
-    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE, 
+    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE,
     UNIQUE (id_curso, id_persona)
 );
 
--- Asistencias a un curso por fecha
+-- Asistencia a cursos
 CREATE TABLE asistencia_curso (
     id_asistencia SERIAL PRIMARY KEY,
     id_curso INT NOT NULL,
@@ -152,10 +160,10 @@ CREATE TABLE asistencia_curso (
     fecha DATE NOT NULL,
     presente BOOLEAN NOT NULL,
     FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE,
-    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE 
+    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE
 );
 
--- Tipos de tareas (pueden variar por curso)
+-- Tipos de tareas por curso
 CREATE TABLE tipo_tarea (
     id_tipo SERIAL PRIMARY KEY,
     id_curso INT NOT NULL,
@@ -163,7 +171,7 @@ CREATE TABLE tipo_tarea (
     FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE
 );
 
--- Rúbrica de evaluación por curso
+-- Rúbricas de evaluación
 CREATE TABLE rubrica (
     id_rubrica SERIAL PRIMARY KEY,
     id_curso INT NOT NULL,
@@ -172,7 +180,7 @@ CREATE TABLE rubrica (
     FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE
 );
 
--- Tareas del curso
+-- Tareas de cursos
 CREATE TABLE tarea (
     id_tarea SERIAL PRIMARY KEY,
     id_curso INT NOT NULL,
@@ -184,18 +192,19 @@ CREATE TABLE tarea (
     FOREIGN KEY (id_tipo) REFERENCES tipo_tarea(id_tipo) ON DELETE CASCADE
 );
 
--- Calificaciones por tarea y criterio
+-- Calificaciones de tareas
 CREATE TABLE calificacion (
     id_calificacion SERIAL PRIMARY KEY,
     id_tarea INT NOT NULL,
-    id_persona INT NOT NULL, 
+    id_persona INT NOT NULL,
     id_criterio INT NOT NULL,
     nota NUMERIC(5,2) NOT NULL CHECK (nota >= 0 AND nota <= 10),
     FOREIGN KEY (id_tarea) REFERENCES tarea(id_tarea) ON DELETE CASCADE,
-    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE, 
+    FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE,
     FOREIGN KEY (id_criterio) REFERENCES rubrica(id_rubrica) ON DELETE CASCADE
 );
 
+-- Devocionales
 CREATE TABLE devocionales (
     id_devocional SERIAL PRIMARY KEY,
     id_usuario INTEGER REFERENCES usuarios(id_usuario),
@@ -207,6 +216,5 @@ CREATE TABLE devocionales (
     reflexion TEXT NOT NULL,
     contenido_calendario JSONB,
     fecha_creacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT devocionales_mes_año_unique UNIQUE (mes, año)
+    fecha_actualizacion TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -10,6 +10,7 @@ class TipoEvento(models.Model):
     activo = models.BooleanField(default=True)  # Siempre se crea activo por defecto
 
     class Meta:
+        managed = False
         db_table = 'tipo_evento'
 
     def __str__(self):
