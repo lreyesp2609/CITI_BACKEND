@@ -163,14 +163,6 @@ CREATE TABLE asistencia_curso (
     FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE
 );
 
--- Tipos de tareas por curso
-CREATE TABLE tipo_tarea (
-    id_tipo SERIAL PRIMARY KEY,
-    id_curso INT NOT NULL,
-    nombre VARCHAR(100) NOT NULL,
-    FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE
-);
-
 -- Rúbricas de evaluación
 CREATE TABLE rubrica (
     id_rubrica SERIAL PRIMARY KEY,
@@ -184,12 +176,12 @@ CREATE TABLE rubrica (
 CREATE TABLE tarea (
     id_tarea SERIAL PRIMARY KEY,
     id_curso INT NOT NULL,
-    id_tipo INT NOT NULL,
+    id_criterio INT NOT NULL,
     titulo VARCHAR(255) NOT NULL,
     descripcion TEXT,
     fecha_entrega DATE,
     FOREIGN KEY (id_curso) REFERENCES curso(id_curso) ON DELETE CASCADE,
-    FOREIGN KEY (id_tipo) REFERENCES tipo_tarea(id_tipo) ON DELETE CASCADE
+    FOREIGN KEY (id_criterio) REFERENCES rubrica(id_rubrica) ON DELETE CASCADE
 );
 
 -- Calificaciones de tareas

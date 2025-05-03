@@ -368,6 +368,38 @@ class EditarTareaView(View):
             return JsonResponse({'error': str(e)}, status=500)
 
 @method_decorator(csrf_exempt, name='dispatch')
+class VerTareaView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            id_tarea = kwargs.get('id_tarea')
+            if not id_tarea:
+                return JsonResponse({'error': 'ID de tarea no proporcionado'}, status=400)
+            
+            tarea = Tarea.objects.filter(id_tarea=id_tarea).first()
+            if not tarea:
+                return JsonResponse({'error': 'Tarea no encontrada'}, status=404)
+            
+            tarea_data = {
+                'id_tarea': tarea.id_tarea,
+                'titulo': tarea.titulo,
+                'descripcion': tarea.descripcion,
+                'fecha_entrega': tarea.fecha_entrega.strftime('%Y-%m-%d') if tarea.fecha_entrega else None,
+                'id_curso': {
+                    'id_curso': tarea.id_curso.id_curso,
+                    'nombre': tarea.id_curso.nombre
+                },
+                'id_criterio': {
+                    'id_criterio': tarea.id_criterio.id_criterio,
+                    'nombre': tarea.id_criterio.nombre
+                }
+            }
+            
+            return JsonResponse(tarea_data, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
 class RegistrarCalificacionesView(View):
     def post(self, request, *args, **kwargs):
         try:

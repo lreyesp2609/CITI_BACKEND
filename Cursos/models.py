@@ -76,6 +76,7 @@ class Calificacion(models.Model):
     id_calificacion = models.AutoField(primary_key=True)
     id_tarea = models.ForeignKey(Tarea, on_delete=models.CASCADE, db_column='id_tarea')
     id_persona = models.ForeignKey(Persona, on_delete=models.CASCADE, db_column='id_persona')
+    id_criterio = models.ForeignKey(Rubrica, on_delete=models.CASCADE, db_column='id_criterio')  # <-- agregar esto
     nota = models.DecimalField(max_digits=5, decimal_places=2)
 
     class Meta:
