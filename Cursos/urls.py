@@ -3,6 +3,8 @@ from .views import *
 
 urlpatterns = [
     path('crear_curso/', CrearCursoView.as_view(), name='crear_curso'),
+    path('editar_criterios_curso/<int:id_curso>/', EditarCriteriosCursoView.as_view(), name='editar_criterios_curso'), 
+    path('listar_criterios_curso/<int:id_curso>/', ListarCriteriosCursoView.as_view(), name='listar_criterios_curso'),
     path('editar_curso/<int:id_curso>/', EditarCursoView.as_view(), name='editar_curso'),
     path('listar_cursos/<int:id_ciclo>/', ListarCursosView.as_view(), name='listar_cursos'),
     path('ver_curso/<int:id_curso>/', VerCursoView.as_view(), name='ver_curso'),
@@ -14,5 +16,6 @@ urlpatterns = [
     path('ver_tarea/<int:id_tarea>/', VerTareaView.as_view(), name='ver_tarea'),
     path('registrar_calificaciones/', RegistrarCalificacionesView.as_view(), name='registrar_calificaciones'),
     path('listar_tareas_curso/<int:id_curso>/', ListarTareasCursoView.as_view(), name='listar_tareas_curso'), 
+    path('listar_calificaciones_tarea/<int:id_tarea>/', ListarCalificacionesTareaView.as_view(), name='listar_calificaciones_tarea'),
     path('ver_calificaciones_alumno/<int:id_persona>/', VerCalificacionesAlumnoView.as_view(), name='ver_calificaciones_alumno'),
 ]

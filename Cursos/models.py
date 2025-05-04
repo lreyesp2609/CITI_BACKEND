@@ -1,6 +1,8 @@
 from django.db import models
+from decimal import Decimal
 from Login.models import Persona, Usuario
 from Ciclos.models import Ciclo
+from django.core.exceptions import ValidationError
 
 # Cursos
 class Curso(models.Model):
@@ -51,6 +53,22 @@ class Rubrica(models.Model):
     id_curso = models.ForeignKey(Curso, on_delete=models.CASCADE, db_column='id_curso')
     nombre_criterio = models.CharField(max_length=100)
     porcentaje = models.DecimalField(max_digits=5, decimal_places=2)
+    
+    def clean(self):
+        # Validar que el porcentaje esté entre 0 y 100
+        if self.porcentaje < Decimal('0') or self.porcentaje > Decimal('100'):
+            raise ValidationError("El porcentaje debe estar entre 0 y 100")
+        
+        # Validar que la suma de porcentajes no exceda 100%
+        if not self.pk:  # Solo para nuevos registros
+            rubricas_existentes = Rubrica.objects.filter(id_curso=self.id_curso)
+            total = sum(r.porcentaje for r in rubricas_existentes) + self.porcentaje
+            if total > Decimal('100'):
+                raise ValidationError(f"La suma de porcentajes excede 100% (actual: {total}%)")
+    
+    def save(self, *args, **kwargs):
+        self.full_clean()  # Ejecuta las validaciones
+        super().save(*args, **kwargs)
 
     class Meta:
         managed = False
@@ -76,7 +94,6 @@ class Calificacion(models.Model):
     id_calificacion = models.AutoField(primary_key=True)
     id_tarea = models.ForeignKey(Tarea, on_delete=models.CASCADE, db_column='id_tarea')
     id_persona = models.ForeignKey(Persona, on_delete=models.CASCADE, db_column='id_persona')
-    id_criterio = models.ForeignKey(Rubrica, on_delete=models.CASCADE, db_column='id_criterio')  # <-- agregar esto
     nota = models.DecimalField(max_digits=5, decimal_places=2)
 
     class Meta:

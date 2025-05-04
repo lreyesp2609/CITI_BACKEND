@@ -5,6 +5,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 import jwt
 import json
+from datetime import datetime 
 from .models import *
 from django.conf import settings
 
@@ -12,6 +13,7 @@ from django.conf import settings
 class CrearCursoView(View):
     def post(self, request, *args, **kwargs):
         try:
+            # 1. Autenticación y validación de token
             auth_header = request.headers.get('Authorization')
             if not auth_header:
                 return JsonResponse({'error': 'Token no proporcionado'}, status=400)
@@ -26,43 +28,210 @@ class CrearCursoView(View):
             except jwt.InvalidTokenError:
                 return JsonResponse({'error': 'Token inválido'}, status=401)
 
-            required_fields = ['nombre', 'descripcion', 'id_ciclo', 'fecha_inicio', 'fecha_fin', 'hora_inicio', 'hora_fin']
-            for field in required_fields:
-                if field not in request.POST:
-                    return JsonResponse({'error': f'El campo {field} es obligatorio'}, status=400)
+            # 2. Validación de campos obligatorios
+            required_fields = ['nombre', 'descripcion', 'id_ciclo', 'fecha_inicio', 
+                            'fecha_fin', 'hora_inicio', 'hora_fin']
+            
+            # Manejo tanto para form-data como para json
+            if request.content_type == 'application/json':
+                data = json.loads(request.body)
+            else:
+                data = request.POST.dict()
 
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                return JsonResponse({
+                    'error': f'Campos obligatorios faltantes: {", ".join(missing_fields)}'
+                }, status=400)
+
+            # 3. Validación de fechas
+            try:
+                fecha_inicio = datetime.strptime(data['fecha_inicio'], '%Y-%m-%d').date()
+                fecha_fin = datetime.strptime(data['fecha_fin'], '%Y-%m-%d').date()
+                
+                if fecha_inicio > fecha_fin:
+                    return JsonResponse({
+                        'error': 'La fecha de inicio no puede ser posterior a la fecha fin'
+                    }, status=400)
+                    
+            except ValueError:
+                return JsonResponse({
+                    'error': 'Formato de fecha inválido. Use YYYY-MM-DD'
+                }, status=400)
+
+            # 4. Validación de horas
+            try:
+                hora_inicio = datetime.strptime(data['hora_inicio'], '%H:%M').time()
+                hora_fin = datetime.strptime(data['hora_fin'], '%H:%M').time()
+                
+                if hora_inicio >= hora_fin:
+                    return JsonResponse({
+                        'error': 'La hora de inicio debe ser anterior a la hora fin'
+                    }, status=400)
+                    
+            except ValueError:
+                return JsonResponse({
+                    'error': 'Formato de hora inválido. Use HH:MM'
+                }, status=400)
+
+            # 5. Creación del curso con transacción atómica
             with transaction.atomic():
+                # Crear el curso
                 curso = Curso.objects.create(
-                    nombre=request.POST['nombre'],
-                    descripcion=request.POST['descripcion'],
-                    id_ciclo_id=request.POST['id_ciclo'],
-                    fecha_inicio=request.POST['fecha_inicio'],
-                    fecha_fin=request.POST['fecha_fin'],
-                    hora_inicio=request.POST['hora_inicio'],
-                    hora_fin=request.POST['hora_fin'],
+                    nombre=data['nombre'],
+                    descripcion=data['descripcion'],
+                    id_ciclo_id=data['id_ciclo'],
+                    fecha_inicio=fecha_inicio,
+                    fecha_fin=fecha_fin,
+                    hora_inicio=hora_inicio,
+                    hora_fin=hora_fin,
                     id_usuario_id=id_usuario
                 )
 
-                # Crear rúbrica por defecto
+                # 6. Crear rúbrica por defecto
                 criterios_por_defecto = [
-                    ('Asistencia', 10.00),
-                    ('Actuación', 30.00),
-                    ('Tareas', 30.00),
-                    ('Examen', 30.00),
+                    {'nombre': 'Asistencia', 'porcentaje': Decimal('10.00')},
+                    {'nombre': 'Actuación', 'porcentaje': Decimal('30.00')},
+                    {'nombre': 'Tareas', 'porcentaje': Decimal('30.00')},
+                    {'nombre': 'Examen', 'porcentaje': Decimal('30.00')},
                 ]
-
-                for nombre, porcentaje in criterios_por_defecto:
-                    Rubrica.objects.create(
-                        id_curso=curso,
-                        nombre_criterio=nombre,
-                        porcentaje=porcentaje
+                
+                # Validar suma de porcentajes
+                suma_porcentajes = sum(c['porcentaje'] for c in criterios_por_defecto)
+                if suma_porcentajes != Decimal('100.00'):
+                    raise ValueError(
+                        f"La suma de porcentajes por defecto debe ser 100% (actual: {suma_porcentajes}%)"
                     )
 
-                return JsonResponse({
-                    'mensaje': 'Curso creado exitosamente',
-                    'id_curso': curso.id_curso
-                }, status=201)
+                # Crear los criterios
+                rubricas_creadas = []
+                for criterio in criterios_por_defecto:
+                    rubrica = Rubrica.objects.create(
+                        id_curso=curso,
+                        nombre_criterio=criterio['nombre'],
+                        porcentaje=criterio['porcentaje']
+                    )
+                    rubricas_creadas.append({
+                        'id_rubrica': rubrica.id_rubrica,
+                        'nombre': rubrica.nombre_criterio,
+                        'porcentaje': float(rubrica.porcentaje)  # Convertir a float para la respuesta JSON
+                    })
 
+                # 7. Preparar respuesta
+                response_data = {
+                    'mensaje': 'Curso creado exitosamente',
+                    'id_curso': curso.id_curso,
+                    'curso': {
+                        'nombre': curso.nombre,
+                        'fecha_inicio': curso.fecha_inicio.strftime('%Y-%m-%d'),
+                        'fecha_fin': curso.fecha_fin.strftime('%Y-%m-%d'),
+                    },
+                    'rubricas_creadas': rubricas_creadas,
+                    'total_rubricas': len(rubricas_creadas),
+                    'suma_porcentajes': suma_porcentajes
+                }
+
+                return JsonResponse(response_data, status=201)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class EditarCriteriosCursoView(View):
+    def put(self, request, id_curso):
+        try:
+            # Verificar autenticación
+            auth_header = request.headers.get('Authorization')
+            if not auth_header:
+                return JsonResponse({'error': 'Token no proporcionado'}, status=400)
+                
+            token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else auth_header
+            
+            try:
+                jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            except jwt.ExpiredSignatureError:
+                return JsonResponse({'error': 'Token expirado'}, status=401)
+            except jwt.InvalidTokenError:
+                return JsonResponse({'error': 'Token inválido'}, status=401)
+
+            # Obtener datos del request
+            data = json.loads(request.body)
+            
+            if 'criterios' not in data:
+                return JsonResponse({'error': 'Se requiere la lista de criterios'}, status=400)
+                
+            criterios = data['criterios']
+            
+            # Validar estructura de los criterios
+            for criterio in criterios:
+                if 'id_rubrica' not in criterio or 'nombre_criterio' not in criterio or 'porcentaje' not in criterio:
+                    return JsonResponse({'error': 'Cada criterio debe tener id_rubrica, nombre_criterio y porcentaje'}, status=400)
+                
+                try:
+                    porcentaje = float(criterio['porcentaje'])
+                    if porcentaje < 0 or porcentaje > 100:
+                        raise ValueError
+                except ValueError:
+                    return JsonResponse({'error': 'Porcentaje debe ser un número entre 0 y 100'}, status=400)
+
+            with transaction.atomic():
+                # Verificar que el curso existe
+                curso = Curso.objects.filter(id_curso=id_curso).first()
+                if not curso:
+                    return JsonResponse({'error': 'Curso no encontrado'}, status=404)
+                
+                # Validar que la suma de porcentajes sea 100%
+                suma_porcentajes = sum(float(c['porcentaje']) for c in criterios)
+                if round(suma_porcentajes, 2) != 100.00:
+                    return JsonResponse({
+                        'error': f'La suma de porcentajes debe ser exactamente 100% (actual: {suma_porcentajes}%)'
+                    }, status=400)
+                
+                # Actualizar o crear criterios
+                ids_procesados = []
+                for criterio_data in criterios:
+                    if criterio_data['id_rubrica']:  # Criterio existente
+                        rubrica = Rubrica.objects.filter(
+                            id_rubrica=criterio_data['id_rubrica'],
+                            id_curso=curso
+                        ).first()
+                        
+                        if not rubrica:
+                            return JsonResponse({
+                                'error': f'Criterio con ID {criterio_data["id_rubrica"]} no pertenece a este curso'
+                            }, status=400)
+                            
+                        rubrica.nombre_criterio = criterio_data['nombre_criterio']
+                        rubrica.porcentaje = criterio_data['porcentaje']
+                        rubrica.save()
+                        ids_procesados.append(rubrica.id_rubrica)
+                    else:  # Nuevo criterio
+                        rubrica = Rubrica.objects.create(
+                            id_curso=curso,
+                            nombre_criterio=criterio_data['nombre_criterio'],
+                            porcentaje=criterio_data['porcentaje']
+                        )
+                        ids_procesados.append(rubrica.id_rubrica)
+                
+                # Eliminar criterios que no están en la lista enviada
+                Rubrica.objects.filter(id_curso=curso).exclude(id_rubrica__in=ids_procesados).delete()
+                
+                return JsonResponse({
+                    'mensaje': 'Criterios actualizados exitosamente',
+                    'criterios_actualizados': len(ids_procesados)
+                }, status=200)
+                
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ListarCriteriosCursoView(View):
+    def get(self, request, id_curso):
+        try:
+            criterios = Rubrica.objects.filter(id_curso_id=id_curso).values(
+                'id_rubrica', 'nombre_criterio', 'porcentaje'
+            )
+            return JsonResponse(list(criterios), safe=False)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
@@ -146,7 +315,6 @@ class ListarCursosView(View):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
-
 
 @method_decorator(csrf_exempt, name='dispatch')
 class VerCursoView(View):
@@ -324,45 +492,84 @@ class CrearTareaView(View):
                 if field not in data:
                     return JsonResponse({'error': f'El campo {field} es obligatorio'}, status=400)
 
+            # Verificar que el curso existe
+            curso = Curso.objects.filter(id_curso=data['id_curso']).first()
+            if not curso:
+                return JsonResponse({'error': 'El curso no existe'}, status=404)
+
+            # Verificar que el criterio pertenece al curso
+            criterio = Rubrica.objects.filter(
+                id_rubrica=data['id_criterio'],
+                id_curso=curso
+            ).first()
+            
+            if not criterio:
+                return JsonResponse({'error': 'El criterio no pertenece a este curso'}, status=400)
+
+            # Crear la tarea
             tarea = Tarea.objects.create(
-                id_curso_id=data['id_curso'],
-                id_criterio_id=data['id_criterio'], 
+                id_curso=curso,
+                id_criterio=criterio,
                 titulo=data['titulo'],
                 descripcion=data.get('descripcion', ''),
                 fecha_entrega=data['fecha_entrega']
             )
 
-            return JsonResponse({'mensaje': 'Tarea creada exitosamente', 'id_tarea': tarea.id_tarea}, status=201)
+            return JsonResponse({
+                'mensaje': 'Tarea creada exitosamente', 
+                'id_tarea': tarea.id_tarea,
+                'titulo': tarea.titulo,
+                'criterio': criterio.nombre_criterio,
+                'porcentaje': float(criterio.porcentaje)
+            }, status=201)
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class EditarTareaView(View):
-    def put(self, request, *args, **kwargs):
+    def put(self, request, id_tarea, *args, **kwargs):
         try:
             data = json.loads(request.body)
-            id_tarea = kwargs.get('id_tarea')
+            required_fields = ['titulo', 'fecha_entrega', 'id_criterio']
+            
+            # Validar campos obligatorios
+            missing_fields = [field for field in required_fields if field not in data]
+            if missing_fields:
+                return JsonResponse({
+                    'error': f'Campos obligatorios faltantes: {", ".join(missing_fields)}'
+                }, status=400)
 
-            # Validar que los campos obligatorios estén presentes
-            required_fields = ['id_criterio', 'titulo', 'fecha_entrega']
-            for field in required_fields:
-                if field not in data:
-                    return JsonResponse({'error': f'El campo {field} es obligatorio'}, status=400)
-
-            # Buscar la tarea por su ID
+            # Obtener la tarea existente
             tarea = Tarea.objects.filter(id_tarea=id_tarea).first()
             if not tarea:
                 return JsonResponse({'error': 'Tarea no encontrada'}, status=404)
 
-            # Actualizar los campos de la tarea
-            tarea.id_criterio_id = data['id_criterio']
+            # Verificar que el criterio pertenece al curso
+            criterio = Rubrica.objects.filter(
+                id_rubrica=data['id_criterio'],
+                id_curso=tarea.id_curso
+            ).first()
+            
+            if not criterio:
+                return JsonResponse({
+                    'error': 'El criterio no pertenece a este curso'
+                }, status=400)
+
+            # Actualizar la tarea
             tarea.titulo = data['titulo']
             tarea.descripcion = data.get('descripcion', tarea.descripcion)
             tarea.fecha_entrega = data['fecha_entrega']
+            tarea.id_criterio = criterio
             tarea.save()
 
-            return JsonResponse({'mensaje': 'Tarea actualizada exitosamente', 'id_tarea': tarea.id_tarea}, status=200)
+            return JsonResponse({
+                'mensaje': 'Tarea actualizada exitosamente',
+                'id_tarea': tarea.id_tarea,
+                'titulo': tarea.titulo,
+                'criterio': criterio.nombre_criterio,
+                'porcentaje': float(criterio.porcentaje)
+            }, status=200)
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
@@ -400,6 +607,30 @@ class VerTareaView(View):
             return JsonResponse({'error': str(e)}, status=500)
 
 @method_decorator(csrf_exempt, name='dispatch')
+class ListarTareasCursoView(View):
+    def get(self, request, *args, **kwargs):
+        try:
+            id_curso = kwargs.get('id_curso')
+            tareas = Tarea.objects.filter(id_curso_id=id_curso).select_related('id_criterio')
+
+            tareas_data = []
+            for tarea in tareas:
+                tareas_data.append({
+                    'id_tarea': tarea.id_tarea,
+                    'titulo': tarea.titulo,
+                    'descripcion': tarea.descripcion,
+                    'fecha_entrega': tarea.fecha_entrega,
+                    'id_criterio': tarea.id_criterio.id_rubrica, 
+                    'criterio': tarea.id_criterio.nombre_criterio,  # Nombre del criterio
+                    'porcentaje': tarea.id_criterio.porcentaje  # Porcentaje del criterio
+                })
+
+            return JsonResponse({'tareas': tareas_data}, status=200)
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
 class RegistrarCalificacionesView(View):
     def post(self, request, *args, **kwargs):
         try:
@@ -428,32 +659,46 @@ class RegistrarCalificacionesView(View):
             return JsonResponse({'error': str(e)}, status=500)
 
 @method_decorator(csrf_exempt, name='dispatch')
-class ListarTareasCursoView(View):
-    def get(self, request, *args, **kwargs):
+class ListarCalificacionesTareaView(View):
+    def get(self, request, id_tarea, *args, **kwargs):
         try:
-            id_curso = kwargs.get('id_curso')
-            tareas = Tarea.objects.filter(id_curso_id=id_curso).select_related('id_criterio')
-
-            if not tareas:
-                return JsonResponse({'error': 'No se encontraron tareas para este curso'}, status=404)
-
-            tareas_data = []
-            for tarea in tareas:
-                tareas_data.append({
-                    'id_tarea': tarea.id_tarea,
-                    'titulo': tarea.titulo,
-                    'descripcion': tarea.descripcion,
-                    'fecha_entrega': tarea.fecha_entrega,
-                    'id_criterio': tarea.id_criterio.nombre_criterio,  # Nombre del criterio
-                    'porcentaje': tarea.id_criterio.porcentaje  # Porcentaje del criterio
+            # Verificar que la tarea existe
+            tarea = Tarea.objects.get(id_tarea=id_tarea)
+            
+            # Obtener todos los participantes del curso con sus datos de persona
+            participantes = CursoParticipante.objects.filter(
+                id_curso=tarea.id_curso
+            ).select_related('id_persona')
+            
+            # Obtener calificaciones existentes para esta tarea
+            calificaciones = Calificacion.objects.filter(
+                id_tarea=id_tarea
+            ).select_related('id_persona')
+            
+            # Crear un diccionario de calificaciones por persona
+            calificaciones_dict = {
+                cal.id_persona.id_persona: cal.nota 
+                for cal in calificaciones
+            }
+            
+            # Preparar la respuesta
+            resultado = []
+            for participante in participantes:
+                persona = participante.id_persona
+                resultado.append({
+                    'id_persona': persona.id_persona,
+                    'nombres': persona.nombres,
+                    'apellidos': persona.apellidos,
+                    'nota': calificaciones_dict.get(persona.id_persona, None)
                 })
-
-            return JsonResponse({'tareas': tareas_data}, status=200)
-
+            
+            return JsonResponse({'participantes': resultado}, status=200)
+            
+        except Tarea.DoesNotExist:
+            return JsonResponse({'error': 'La tarea no existe'}, status=404)
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
-
-
+            return JsonResponse({'error': str(e)}, status=500)   
+           
 @method_decorator(csrf_exempt, name='dispatch')
 class VerCalificacionesAlumnoView(View):
     def get(self, request, *args, **kwargs):

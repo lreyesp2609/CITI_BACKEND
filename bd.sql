@@ -189,11 +189,10 @@ CREATE TABLE calificacion (
     id_calificacion SERIAL PRIMARY KEY,
     id_tarea INT NOT NULL,
     id_persona INT NOT NULL,
-    id_criterio INT NOT NULL,
     nota NUMERIC(5,2) NOT NULL CHECK (nota >= 0 AND nota <= 10),
     FOREIGN KEY (id_tarea) REFERENCES tarea(id_tarea) ON DELETE CASCADE,
     FOREIGN KEY (id_persona) REFERENCES personas(id_persona) ON DELETE CASCADE,
-    FOREIGN KEY (id_criterio) REFERENCES rubrica(id_rubrica) ON DELETE CASCADE
+    UNIQUE (id_tarea, id_persona)
 );
 
 -- Devocionales
