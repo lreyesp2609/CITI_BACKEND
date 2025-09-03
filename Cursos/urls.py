@@ -16,6 +16,7 @@ urlpatterns = [
     path('ver_tarea/<int:id_tarea>/', VerTareaView.as_view(), name='ver_tarea'),
     path('registrar_calificaciones/', RegistrarCalificacionesView.as_view(), name='registrar_calificaciones'),
     path('listar_tareas_curso/<int:id_curso>/', ListarTareasCursoView.as_view(), name='listar_tareas_curso'), 
+    path('calcular_calificacion/<int:id_curso>/<int:id_persona>/', CalcularCalificacionAlumnoView.as_view(), name='calcular_calificacion'),
     path('listar_calificaciones_tarea/<int:id_tarea>/', ListarCalificacionesTareaView.as_view(), name='listar_calificaciones_tarea'),
     path('ver_calificaciones_alumno/<int:id_persona>/', VerCalificacionesAlumnoView.as_view(), name='ver_calificaciones_alumno'),
 ]
