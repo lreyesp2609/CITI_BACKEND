@@ -101,17 +101,18 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',   # motor PostgreSQL
-        'NAME': 'postgres',                          # base de datos en Supabase
-        'USER': 'postgres',                          # usuario de Supabase
-        'PASSWORD': 'citi_uy_citi',                # la contraseña de Database Settings
-        'HOST': 'https://rahiljuxmaienmmnhcxh.supabase.co', # host de Supabase
-        'PORT': '5432',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DB_NAME', 'postgres'),       # nombre de la base de datos
+        'USER': os.environ.get('DB_USER', 'postgres'),       # variable de entorno DB_USER
+        'PASSWORD': os.environ.get('DB_PASSWORD'),           # variable de entorno DB_PASSWORD
+        'HOST': os.environ.get('DB_HOST', 'rahiljuxmaienmmnhcxh.supabase.co'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {
-            'sslmode': 'require',                    # obligatorio para conexión segura
+            'sslmode': 'require', 
         },
     }
 }
+
 
 # ---------------------------
 # Configuración de la base de datos original
