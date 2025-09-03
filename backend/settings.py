@@ -99,19 +99,37 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+import dj_database_url
+
+DATABASES = {
+    'default': dj_database_url.config(
+        default='postgresql://db_citi_uy_user:Jl7IR3KyTcn752ojkLNUub8G7khBRmH0@dpg-d2sb0t0dl3ps73bqddog-a/db_citi_uy',
+        conn_max_age=600,
+    )
+}
+
+# ---------------------------
+# Configuración de la base de datos original
+# ---------------------------
+# Esta configuración utiliza PostgreSQL local con django_pg8000.
+# Actualmente no funcionará en Render, ya que 'localhost' no existe en el servidor.
+# Se mantiene comentada para referencia o uso local.
+
+"""
 DATABASES = {
     'default': {
-        'ENGINE': 'django_pg8000',
-        'NAME': 'db_citi_uy',
-        'USER': 'postgres',
-        'PASSWORD': '12345',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'ENGINE': 'django_pg8000',  # Motor de base de datos PostgreSQL usando pg8000
+        'NAME': 'db_citi_uy',       # Nombre de la base de datos
+        'USER': 'postgres',         # Usuario de la base de datos
+        'PASSWORD': '12345',        # Contraseña del usuario
+        'HOST': 'localhost',        # Host donde corre la base de datos (localhost en desarrollo)
+        'PORT': '5432',             # Puerto de PostgreSQL por defecto
         'OPTIONS': {
-            'client_encoding': 'UTF8',
+            'client_encoding': 'UTF8',  # Codificación de caracteres
         },
     }
 }
+"""
 
 
 # Password validation
