@@ -65,7 +65,7 @@ MIDDLEWARE = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-    "https://tu-frontend-en-render.onrender.com",  # Cambia esto por tu URL de frontend
+    "city_uy.web.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -113,7 +113,7 @@ DATABASES = {
         'NAME': os.environ.get('DB_NAME', 'postgres'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST', 'db.rahiljuxmaienmmnhcxh.supabase.co'),
+        'HOST': os.environ.get('DB_HOST', 'db.ynqtefjalnrnccokaxml.supabase.co'),
         'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {
             'sslmode': 'require',
