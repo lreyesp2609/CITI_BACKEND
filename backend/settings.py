@@ -99,13 +99,18 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-import dj_database_url
-
 DATABASES = {
-    'default': dj_database_url.config(
-        default='postgresql://db_citi_uy_user:Jl7IR3KyTcn752ojkLNUub8G7khBRmH0@dpg-d2sb0t0dl3ps73bqddog-a/db_citi_uy',
-        conn_max_age=600,
-    )
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',   # motor PostgreSQL
+        'NAME': 'postgres',                          # base de datos en Supabase
+        'USER': 'postgres',                          # usuario de Supabase
+        'PASSWORD': 'citi_uy_citi',                # la contraseña de Database Settings
+        'HOST': 'https://rahiljuxmaienmmnhcxh.supabase.co', # host de Supabase
+        'PORT': '5432',
+        'OPTIONS': {
+            'sslmode': 'require',                    # obligatorio para conexión segura
+        },
+    }
 }
 
 # ---------------------------
