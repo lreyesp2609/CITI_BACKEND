@@ -409,27 +409,95 @@ class RegistrarParticipantesCursoView(View):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ListarParticipantesCursoView(View):
-    def get(self, request, *args, **kwargs):
+    def get(self, request, id_curso):
         try:
-            id_curso = kwargs.get('id_curso')
-            participantes = CursoParticipante.objects.filter(id_curso=id_curso).select_related('id_persona')
+            participantes = CursoParticipante.objects.filter(id_curso_id=id_curso).select_related('id_persona')
             
-            if not participantes.exists():
-                return JsonResponse([], safe=False, status=200)
-
-            data = []
+            participantes_data = []
             for participante in participantes:
-                data.append({
+                calificacion_response = CalcularCalificacionAlumnoView().get(
+                    request, id_curso, participante.id_persona.id_persona
+                )
+                calificacion_data = json.loads(calificacion_response.content)
+                
+                participantes_data.append({
                     'id_persona': participante.id_persona.id_persona,
                     'nombre': participante.id_persona.nombres,
                     'apellido': participante.id_persona.apellidos,
+                    'calificacion_final': calificacion_data.get('calificacion_final', 0)
                 })
-
-            return JsonResponse(data, safe=False, status=200)
-
+            
+            return JsonResponse(participantes_data, safe=False)
+            
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
 
+@method_decorator(csrf_exempt, name='dispatch')
+class CalcularCalificacionAlumnoView(View):
+    def get(self, request, id_curso, id_persona):
+        try:
+            criterios = Rubrica.objects.filter(id_curso_id=id_curso).values(
+                'id_rubrica', 'nombre_criterio', 'porcentaje'
+            )
+            
+            if not criterios:
+                return JsonResponse({'calificacion_final': 0, 'detalles': []}, status=200)
+            
+            total_porcentaje = sum(c['porcentaje'] for c in criterios)
+            if total_porcentaje != 100:
+                factor_ajuste = 100.0 / total_porcentaje if total_porcentaje != 0 else 0
+            else:
+                factor_ajuste = 1.0
+            
+            calificacion_total = 0
+            detalles_por_criterio = []
+            
+            for criterio in criterios:
+                calificaciones = Calificacion.objects.filter(
+                    id_persona_id=id_persona,
+                    id_criterio_id=criterio['id_rubrica']
+                ).select_related('id_tarea')
+                
+                if calificaciones.exists():
+                    promedio_criterio = calificaciones.aggregate(
+                        promedio=models.Avg('nota')
+                    )['promedio'] or 0
+                    
+                    porcentaje_efectivo = criterio['porcentaje'] * factor_ajuste
+                    puntos_criterio = (promedio_criterio * porcentaje_efectivo) / 100
+                    calificacion_total += puntos_criterio
+                    
+                    detalles_por_criterio.append({
+                        'criterio': criterio['nombre_criterio'],
+                        'porcentaje': criterio['porcentaje'],
+                        'porcentaje_efectivo': round(porcentaje_efectivo, 2),
+                        'promedio': round(promedio_criterio, 2),
+                        'puntos_obtenidos': round(puntos_criterio, 2),
+                        'tareas': [{
+                            'titulo_tarea': cal.id_tarea.titulo,
+                            'nota': float(cal.nota)
+                        } for cal in calificaciones]
+                    })
+                else:
+                    detalles_por_criterio.append({
+                        'criterio': criterio['nombre_criterio'],
+                        'porcentaje': criterio['porcentaje'],
+                        'porcentaje_efectivo': round(criterio['porcentaje'] * factor_ajuste, 2),
+                        'promedio': 0,
+                        'puntos_obtenidos': 0,
+                        'tareas': []
+                    })
+            
+            return JsonResponse({
+                'calificacion_final': round(calificacion_total, 2),
+                'detalles': detalles_por_criterio,
+                'total_porcentaje_original': total_porcentaje,
+                'factor_ajuste': factor_ajuste
+            }, status=200)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+        
 @method_decorator(csrf_exempt, name='dispatch')
 class RegistrarAsistenciaCursoView(View):
     def post(self, request, *args, **kwargs):
@@ -635,7 +703,8 @@ class RegistrarCalificacionesView(View):
     def post(self, request, *args, **kwargs):
         try:
             data = json.loads(request.body)
-            required_fields = ['id_tarea', 'calificaciones']  # calificaciones: lista de {id_persona, id_criterio, nota}
+            required_fields = ['id_tarea', 'calificaciones']  # calificaciones: lista de {id_persona, nota}
+            eliminadas = data.get('eliminadas', [])
 
             for field in required_fields:
                 if field not in data:
@@ -646,12 +715,19 @@ class RegistrarCalificacionesView(View):
                     calificacion, created = Calificacion.objects.update_or_create(
                         id_tarea_id=data['id_tarea'],
                         id_persona_id=cal['id_persona'],
-                        defaults={'nota': cal['nota']}  
+                        defaults={'nota': cal['nota']}
                     )
                     if created:
                         print(f"Calificación creada para {cal['id_persona']}")
                     else:
                         print(f"Calificación actualizada para {cal['id_persona']}")
+
+                for id_persona in eliminadas:
+                    Calificacion.objects.filter(
+                        id_tarea_id=data['id_tarea'],
+                        id_persona_id=id_persona
+                    ).delete()
+                    print(f"Calificación eliminada para {id_persona}")
 
             return JsonResponse({'mensaje': 'Calificaciones registradas correctamente'}, status=201)
 
