@@ -106,20 +106,24 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Database configuration
-# Usar psycopg2 en lugar de pg8000 para mejor compatibilidad
+# Configuración para forzar IPv4 y evitar problemas de conectividad
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'postgres'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST', 'rahiljuxmaienmmnhcxh.supabase.co'),
+        'HOST': os.environ.get('DB_HOST', 'db.rahiljuxmaienmmnhcxh.supabase.co'),
         'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {
             'sslmode': 'require',
-            'connect_timeout': 30,  # Timeout de conexión
+            'connect_timeout': 60,
+            'options': '-c statement_timeout=30000',
+            # Forzar IPv4
+            'target_session_attrs': 'read-write',
         },
-        'CONN_MAX_AGE': 60,  # Reutilizar conexiones
+        'CONN_MAX_AGE': 0,
+        'ATOMIC_REQUESTS': True,
     }
 }
 
