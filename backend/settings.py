@@ -106,26 +106,23 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Database configuration
-# Configuración para forzar IPv4 y evitar problemas de conectividad
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('DB_NAME', 'postgres'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST', 'db.ynqtefjalnrnccokaxml.supabase.co'),
+        'HOST': os.environ.get('DB_HOST'), 
         'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {
             'sslmode': 'require',
             'connect_timeout': 60,
-            'options': '-c statement_timeout=30000',
-            # Forzar IPv4
-            'target_session_attrs': 'read-write',
         },
         'CONN_MAX_AGE': 0,
         'ATOMIC_REQUESTS': True,
     }
 }
+
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
