@@ -12,13 +12,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-default')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
-ALLOWED_HOSTS = ['.onrender.com']
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+# Permitir hosts de Render y localhost para desarrollo
+ALLOWED_HOSTS = [
+    '.onrender.com',
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0'
+]
+
+# Configuración de archivos estáticos
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Application definition
-
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -39,12 +47,12 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
-
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Para servir archivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -53,12 +61,16 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# CORS configuration
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173", 
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://tu-frontend-en-render.onrender.com",  # Cambia esto por tu URL de frontend
 ]
 
-ROOT_URLCONF = 'backend.urls'
+CORS_ALLOW_CREDENTIALS = True
 
+ROOT_URLCONF = 'backend.urls'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -78,7 +90,6 @@ SIMPLE_JWT = {
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        #'DIRS': [os.path.join(BASE_DIR, 'reportes/templates')],
         'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -94,52 +105,25 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
+# Database configuration
+# Usar psycopg2 en lugar de pg8000 para mejor compatibilidad
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', 'postgres'),       # nombre de la base de datos
-        'USER': os.environ.get('DB_USER', 'postgres'),       # variable de entorno DB_USER
-        'PASSWORD': os.environ.get('DB_PASSWORD'),           # variable de entorno DB_PASSWORD
+        'NAME': os.environ.get('DB_NAME', 'postgres'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD'),
         'HOST': os.environ.get('DB_HOST', 'rahiljuxmaienmmnhcxh.supabase.co'),
         'PORT': os.environ.get('DB_PORT', '5432'),
         'OPTIONS': {
-            'sslmode': 'require', 
+            'sslmode': 'require',
+            'connect_timeout': 30,  # Timeout de conexión
         },
+        'CONN_MAX_AGE': 60,  # Reutilizar conexiones
     }
 }
-
-
-# ---------------------------
-# Configuración de la base de datos original
-# ---------------------------
-# Esta configuración utiliza PostgreSQL local con django_pg8000.
-# Actualmente no funcionará en Render, ya que 'localhost' no existe en el servidor.
-# Se mantiene comentada para referencia o uso local.
-
-"""
-DATABASES = {
-    'default': {
-        'ENGINE': 'django_pg8000',  # Motor de base de datos PostgreSQL usando pg8000
-        'NAME': 'db_citi_uy',       # Nombre de la base de datos
-        'USER': 'postgres',         # Usuario de la base de datos
-        'PASSWORD': '12345',        # Contraseña del usuario
-        'HOST': 'localhost',        # Host donde corre la base de datos (localhost en desarrollo)
-        'PORT': '5432',             # Puerto de PostgreSQL por defecto
-        'OPTIONS': {
-            'client_encoding': 'UTF8',  # Codificación de caracteres
-        },
-    }
-}
-"""
-
 
 # Password validation
-# https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -155,41 +139,51 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
-# https://docs.djangoproject.com/en/5.1/topics/i18n/
-
-LANGUAGE_CODE = 'en-us'
-
-TIME_ZONE = 'UTC'
-
+LANGUAGE_CODE = 'es-ec'  # Cambiado a español Ecuador
+TIME_ZONE = 'America/Guayaquil'  # Zona horaria de Ecuador
 USE_I18N = True
-
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STATIC_URL = 'static/'
+# WhiteNoise configuration for static files
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Configura los orígenes permitidos
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
-# Si necesitas permitir credenciales (cookies, auth headers)
-CORS_ALLOW_CREDENTIALS = True
 
 # Configuración para archivos multimedia
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_ROOT = BASE_DIR / 'media'
 
-# Tamaño máximo de archivos subidos (opcional)
+# Tamaño máximo de archivos subidos
 DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
+
+# Logging configuration para debugging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'DEBUG' if DEBUG else 'INFO',
+        },
+    },
+}
+
+# Security settings para producción
+if not DEBUG:
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 3600
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
